@@ -1,0 +1,3 @@
+﻿name,description,subType,value,type
+host1,description1,HOST,1.1.1.1,networkObject
+host2,description 2,HOST,2.2.2.2,networkObject

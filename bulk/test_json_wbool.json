@@ -1,0 +1,11 @@
+[
+	{
+		"field1": 123,
+		"field2": true
+	},
+	{
+		"field1": 234,
+		"field2": false
+	}
+]
+

@@ -1,0 +1,3 @@
+field1(int),field2(bool)
+123,True
+234,False
