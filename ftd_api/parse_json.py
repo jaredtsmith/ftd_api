@@ -1,28 +1,18 @@
 '''
-Copyright (c) 2019-2020 Cisco and/or its affiliates.
- 
-This software is licensed to you under the terms of the Cisco Sample
-Code License, Version 1.0 (the "License"). A copy of the License
-can be found in the LICENSE.TXT file of this software or at
-                 
-https://developer.cisco.com/site/licenses/CISCO-SAMPLE-CODE-LICENSE-V1.0
- 
-All use of the material herein must be in accordance with the terms of
-the License. All rights not expressly granted by the License are
-reserved. Unless required by applicable law or agreed to separately in
-writing, software distributed under the License is distributed on an
-"AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
-express or implied.
+Copyright (c) 2020 Cisco and/or its affiliates.
 
+A copy of the License (MIT License) can be found in the LICENSE.TXT
+file of this software.
 
-Created on Dec 19, 2019
+Author: Jared T. Smith <jarmith@cisco.com>
+Created: Dec 19, 2019
 updated
 
 '''
 
 import csv
 import json
-import parse_csv
+import ftd_api.parse_csv as parse_csv
 import os
 
 NONE_CSV_VALUE = '-=NONE/NULL=-'
@@ -30,12 +20,12 @@ NONE_CSV_VALUE = '-=NONE/NULL=-'
 
 def get_keys_from_dict(my_dict, path_set, current_path=None, path_to_value_dict=None):
     """
-    The intention of this method is to take a dict parse from JSON where 
+    The intention of this method is to take a dict parse from JSON where
     the only structures in the dict are:
-    
+
     Parameters:
     - primitive values
-    - lists 
+    - lists
     - dicts
 
     It takes the following parameters:
@@ -44,18 +34,18 @@ def get_keys_from_dict(my_dict, path_set, current_path=None, path_to_value_dict=
     current_path -- This should be internally set it is used for recursion where
                     there is a need to track the path to the leaf node from a root
                     element in the dict.
-    path_to_value_dict -- If provided this will collect final paths and put them in a 
+    path_to_value_dict -- If provided this will collect final paths and put them in a
                           map to the value under that path.  Basically it will flatten
                           the original dict into a one level dict with hierarchical keys
-                          
+
     The real goal of this method is to produce a flattened key:value map where the key
-    is the full path to a value and the value is the end value.  This is used for 
+    is the full path to a value and the value is the end value.  This is used for
     conversion between dictionary and CSV formats.
     """
     if current_path is None:
         # Start with empty string
         current_path = ''
-        
+
     for key in my_dict.keys():
         if type(my_dict[key]) == list:
             recursion_path = current_path + key
@@ -72,11 +62,11 @@ def get_keys_from_dict(my_dict, path_set, current_path=None, path_to_value_dict=
 
 def _get_keys_from_list(my_list, path_set, current_path=None, path_to_value_dict=None):
     """
-    This is a helper method for get_keys_from_dict that will walk down a list potentially recursing 
+    This is a helper method for get_keys_from_dict that will walk down a list potentially recursing
     to discover the paths to each end value.  It will build upon what was passed into it.
-    
+
     Parameters:
-    
+
     my_list -- This is the list to walk down
     path_set -- This is the list of complete leaf node paths to walk
     current_path -- This is the path to the base of the list so far (leave empty if starting here)
@@ -105,14 +95,14 @@ def _get_keys_from_list(my_list, path_set, current_path=None, path_to_value_dict
 def _create_fieldname_to_type_map(flat_dict_list):
     """
     This method will create a map of file names to the respective data types
-    this is used so we can put type hints in the resultant CSV 
-    
+    this is used so we can put type hints in the resultant CSV
+
     For now this will only populate integer fields
-    
+
     Parameters:
-    
+
     flat_dict_list(in) -- This is a list of dictionaries that are already flattened into
-                      full path:value 
+                      full path:value
     """
     fieldname_to_type = {}
     for flat_dict in flat_dict_list:
@@ -122,7 +112,7 @@ def _create_fieldname_to_type_map(flat_dict_list):
             if key in fieldname_to_type:
                 existing_field_type = fieldname_to_type[key]
                 if existing_field_type != 'BAD' and existing_field_type != type(value): # MARK the mapping BAD
-                    # previously found type doesn't match newly found type mark bad so 
+                    # previously found type doesn't match newly found type mark bad so
                     # we don't cast it into a value that won't work (leave as a string)
                     fieldname_to_type[key] == 'BAD' # otherwise it matches
             elif type(value) == int: #doing it like this in case we add more types later
@@ -138,14 +128,14 @@ def _fixup_key_list_with_types(key_list, fieldname_to_type):
     """
     This method will annotate the field names in the key_list with the type for example:
     fieldname(int)
-    
-    This is used to make them easier to decode by giving a type hint especially for integer 
+
+    This is used to make them easier to decode by giving a type hint especially for integer
     types.
-    
+
     Parameters:
-    
-    key_list(in/out) -- This is the list of non-typed keys (array updated inline) 
-    fieldname_to_type(in) -- This is the map of full field name with path to type where the type string will be encoded 
+
+    key_list(in/out) -- This is the list of non-typed keys (array updated inline)
+    fieldname_to_type(in) -- This is the map of full field name with path to type where the type string will be encoded
                              in the key name.
     """
     if len(fieldname_to_type) > 0: #fix up key_list with type encoding
@@ -153,7 +143,7 @@ def _fixup_key_list_with_types(key_list, fieldname_to_type):
         for key in key_list:
             if key in fieldname_to_type and fieldname_to_type[key] != 'BAD':
                 newname = key + '(' + fieldname_to_type[key] + ')'
-                key_list[count] = newname 
+                key_list[count] = newname
             count += 1
 
 def decorate_dict_list_for_bulk(dict_list):
@@ -180,16 +170,16 @@ def flatten_dict_list(dict_list, path_set=None):
     """
     This method will take a list of dictionaries and will return a list of flattened dictionaries
     where there will only be a single key/value with no hierarchy.
-    
+
     Parameters:
     dict_list -- input list of dictionaries (with hierarchy)
     path_set -- Optional arg which will collect unique paths (out)
-    
+
     Return will be the converted flattened list
     """
     flat_dict_list = []
     if path_set is None:
-        # this is for use cases when people don't care about the path set and just want the 
+        # this is for use cases when people don't care about the path set and just want the
         # flat dict
         path_set = set()
     for object_dict in dict_list: # These are the top level dictionaries that need to be processed we will do one pass to
@@ -204,11 +194,11 @@ def flatten_dict_list(dict_list, path_set=None):
 def dict_list_to_csv(dict_list, csv_file_out):
     """
     This method will take a list of python dictionaries and will convert them to a encoded CSV file.
-    This will typically make the most sense when a single file has a list of one type of object so the 
+    This will typically make the most sense when a single file has a list of one type of object so the
     CSV columns make more sense.
-    
+
     Parameters:
-    
+
     dict_list(in) - This is the list of dictionary objects to process
     csv_file_out - This is the name of the file to write the results to
     """
@@ -216,7 +206,7 @@ def dict_list_to_csv(dict_list, csv_file_out):
         path_set = set()
         #flat dicts have the attribute names flattened as a single key the hierarchy is encoded in the name with "." and [] for arrays
         flat_dict_list = flatten_dict_list(dict_list, path_set)
-        
+
         #Sort keys so CSV will have keys in sorted order to make it more readable
         key_list = list(path_set)
         key_list.sort()
@@ -226,7 +216,7 @@ def dict_list_to_csv(dict_list, csv_file_out):
         for key in key_list:
             key_index_dict[key] = count
             count += 1
-        
+
         # Try to determine data type for each field so we can encode that in the field name in the CSV
         # we will loop through the flat dict to determine this
         fieldname_to_type = _create_fieldname_to_type_map(flat_dict_list)
@@ -251,7 +241,7 @@ def dict_list_to_csv(dict_list, csv_file_out):
 
 def parse_json_to_csv(json_file_in, csv_file_out):
     """
-    This method will take in a JSON file parse it and will generate a CSV file with the 
+    This method will take in a JSON file parse it and will generate a CSV file with the
     same content.
 
     Parameters:
@@ -266,16 +256,16 @@ def save_dictlist_as_file(dict_list, output_file):
     """
     This method will take a dict list and will write it out
     in json format into the output_file
-    
+
     Parameters:
-    
+
     dict_list -- This is the input dict_list
     output_file -- This is the name of the file (fully qualified)
     to write the data to.
     """
     with open(output_file, "w") as output_handle:
         output_handle.write(json.dumps(dict_list))
-    
+
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='Convert JSON files to CSV')
@@ -293,4 +283,3 @@ if __name__ == '__main__':
         print('Missing required arguments')
         parser.print_usage()
 
-    
