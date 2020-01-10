@@ -23,7 +23,7 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/jaredtsmith/ftd_api",
     packages=setuptools.find_packages(),
-    scripts=['scripts/ftd_bulk_tool'],
+    scripts=['scripts/ftd_bulk_tool', 'scripts/ftd_bulk_tool.py'],
     classifiers=[
         'Development Status :: 3 - Alpha',
         "Programming Language :: Python :: 3",
