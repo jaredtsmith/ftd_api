@@ -11,6 +11,10 @@ updated
 '''
 from ftd_api.ftd_client import FTDClient
 from ftd_api import parse_json
+from ftd_api.string_helper import split_string_list
+from ftd_api.parse_json import pretty_print_json_file
+from ftd_api.file_helper import read_string_from_file
+from ftd_api.parse_yaml import write_dict_to_yaml_file
 import requests
 import time
 import json
@@ -499,3 +503,71 @@ class BulkTool:
         referenced_model_list = [x for x in referenced_model_set if x.find('wrapper') == -1]
         referenced_model_list.sort()
         return referenced_model_list
+    
+    def bulk_export(self, mode, destination_directory, url=None, type_list=None, id_list=None, name_list=None, output_format='JSON') :
+        """
+        Parameters:  
+        
+        mode -- This can be either:  'FULL_EXPORT', 'PENDING_CHANGE_EXPORT', 'PARTIAL_EXPORT'
+        """
+        # Base Case
+        mode = 'FULL_EXPORT'
+    
+        # If we have a URL it is a URL export
+        if args.url is not None:
+            args.mode = 'URL_EXPORT'
+            url_export(args, client)
+    
+        # if it is not a URL export lets continue
+        else:
+            location_export_zip = os.path.normpath(destination_directory + '/myexport.zip')
+            type_list = None
+    
+            # PENDING_CHANGE_EXPORT called for
+            if args.pending:
+                args.mode = 'PENDING_CHANGE_EXPORT'
+    
+            # If it is a pending change export we do not support filtering
+            # If there are filter lists defined it is a PARTIAL EXPORT
+            else:
+                # If we have a filter list it is a PARTIAL_EXPORT for the UI
+                if args.type_list is not None:
+                    type_list = split_string_list(args.type_list)
+                    args.mode = 'PARTIAL_EXPORT'
+                id_list = None
+                if args.id_list is not None:
+                    id_list = split_string_list(args.id_list)
+                    args.mode = 'PARTIAL_EXPORT'
+                name_list = None
+                if args.name_list is not None:
+                    name_list = split_string_list(args.name_list)
+                    args.mode = 'PARTIAL_EXPORT'
+    
+            # Download export file
+            self.do_download_export_file(
+                export_file_name=location_export_zip,
+                id_list=id_list,
+                type_list=type_list,
+                name_list=name_list,
+                export_type=mode
+            )
+            if output_format == 'CSV':
+                logging.info('Exporting in CSV format')
+                self.convert_export_file_to_csv(
+                    location_export_zip, destination_directory)
+                logging.info('CSV files can be found in: '+str(destination_directory))
+            elif output_format == 'JSON':
+                logging.info('Exporting in JSON format')
+                json_file = self.extract_config_file_from_export(
+                    location_export_zip, destination_directory)
+                pretty_print_json_file(json_file)
+                logging.info('JSON files can be found in: '+str(json_file))
+            elif output_format == 'YAML':
+                logging.info('Exporting in YAML format')
+                json_file = self.extract_config_file_from_export(
+                    location_export_zip, destination_directory)
+                object_list = json.loads(read_string_from_file(json_file))
+                yaml_file = destination_directory+'/export.yaml'
+                write_dict_to_yaml_file(yaml_file, object_list)
+                logging.info('YAML file can be found in: '+str(yaml_file))
+    
