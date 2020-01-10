@@ -155,7 +155,7 @@ def set_variable_in_dict(dict_to_set, variable_name, variable_value):
     # This regex will split the first token into two parts:
     # - The variable_name name (without array indexing)
     # - The array indexes [2][3][4]
-    match = re.search('([\w|\d]+)(\[.*\])', token_list[0])
+    match = re.search(r'([\w|\d]+)(\[.*\])', token_list[0])
     parsed_variable_name = None
     index_list = None
     if match is not None:
@@ -166,7 +166,7 @@ def set_variable_in_dict(dict_to_set, variable_name, variable_value):
         indexes = match.group(2)
         # Now parse all indexes could be nested arrays like [2][1]
         # We are parsing out the digits
-        index_list = re.findall('\[(\d+)\]', indexes)
+        index_list = re.findall(r'\[(\d+)\]', indexes)
         # Coerce all indexes to integers
         index_list = [int(x) for x in index_list]
     else:
@@ -271,7 +271,7 @@ def parse_csv_to_dict(csv_file):
                 count = 0
                 for field in field_names:
                     # Looking for embedded data type in the field names for proper type conversion
-                    match = re.search('(.*)\((.*)\)', field)
+                    match = re.search(r'(.*)\((.*)\)', field)
                     if match:
                         variable = match.group(1)
                         typeconvert = match.group(2)
