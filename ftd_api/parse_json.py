@@ -13,9 +13,23 @@ updated
 import csv
 import json
 import ftd_api.parse_csv as parse_csv
+from ftd_api.file_helper import read_string_from_file
+from ftd_api.file_helper import print_string_to_file
 import os
 
 NONE_CSV_VALUE = '-=NONE/NULL=-'
+
+def pretty_print_json_file(json_file):
+    """
+    This method will take a JSON file and will convert it to pretty logging.info format
+
+    Parameters:
+
+    json_file -- The JSON file to pretty logging.info
+
+    """
+    json_data = json.loads(read_string_from_file(json_file))
+    print_string_to_file(json_file, json.dumps(json_data, indent=3, sort_keys=True))
 
 
 def get_keys_from_dict(my_dict, path_set, current_path=None, path_to_value_dict=None):

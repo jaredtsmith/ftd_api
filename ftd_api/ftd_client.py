@@ -12,9 +12,7 @@ updated
 import requests
 import json
 import warnings
-import tempfile
 import logging
-import os.path
 import time
 
 
