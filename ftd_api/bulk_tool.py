@@ -9,13 +9,13 @@ Created: Dec 10, 2020
 updated
 
 '''
-from ftd_api.ftd_client import FTDClient
 from ftd_api import parse_json
-from ftd_api.string_helper import split_string_list
+from ftd_api import parse_csv
 from ftd_api.parse_json import pretty_print_json_file
 from ftd_api.file_helper import read_string_from_file
 from ftd_api.parse_yaml import write_dict_to_yaml_file
-import requests
+from ftd_api.parse_yaml import read_yaml_to_dict
+from ftd_api.file_helper import print_string_to_file
 import time
 import json
 import random
@@ -31,37 +31,15 @@ import zipfile
 # probably desirable longer term to share a client between bulk calls and other calls?  Not entirely sure what that looks like yet though.
 class BulkTool:
 
-    def __init__(self, address='192.168.1.1', port=443, username="admin", password="Admin123", version='latest'):
+    def __init__(self, client):
         """
         Parameters:
 
-        address -- The server address to connect to
-        port -- The port to connect to
-        username -- The username to log into
-        password -- The password to authenticate with
-        version -- The URL version to apply by default we will use latest
+        client -- An instance of an FTDClient object from the ftd_client file
         """
         # Instantiate an FTD client
-        self.client = FTDClient(address=address, port=port, username=username, password=password, version=version)
-        # Let's just auto login we will not use custom since this is a one at a time call and there will not be anything long lived
-        # enough to use a custom token
-        self.client.login()
-        self.version = version
-
-    def _create_auth_headers(self):
-        """
-        Helper method to fetch standard authorization headers for HTTP calls
-        """
-        auth_headers = {**self.client.get_headers()}
-        auth_headers['Authorization'] = 'Bearer ' + self.client.get_access_token()
-        return auth_headers
-
-    def _get_base_url(self):
-        """
-        Helper to fetch base URL
-        """
-        return 'https://'+self.client.get_address_and_port_string()
-
+        self.client = client
+        
     def _do_get_export_job_status(self, job_history_uuid):
         """
         Method to fetch export job status (helper method shouldn't be directly used)
@@ -72,9 +50,7 @@ class BulkTool:
         Note:  The status response contains the name of the file which can be used
         to download the file
         """
-        auth_headers = self._create_auth_headers()
-        url = self._get_base_url()+'/api/fdm/'+self.version+'/jobs/configexportstatus/%s' % job_history_uuid
-        result = requests.get(url, headers=auth_headers, verify=False)
+        result = self.client.do_get_raw_with_base_url(f'/jobs/configexportstatus/{job_history_uuid}')
         if result.status_code == 200:
             return result.json()
         else:
@@ -88,11 +64,9 @@ class BulkTool:
         Parameters:
         job_history_id - jobHistoryUuid value from the import job
 
-        Return will be the JSON status document
+        Return will be an HTTP response document
         """
-        auth_headers = self._create_auth_headers()
-        url = self._get_base_url()+'/api/fdm/'+self.version+'/jobs/configimportstatus/'+str(job_history_id)
-        return requests.get(url, headers=auth_headers, verify=False)
+        return self.client.do_get_raw_with_base_url(f'/jobs/configimportstatus/{str(job_history_id)}')
 
     def _do_import_file(self, file_name):
         """
@@ -102,15 +76,14 @@ class BulkTool:
 
         file_name -- The file name to import (as returned by the upload method not fully qualified)
         """
-        auth_headers = self._create_auth_headers()
         body = {
             "autoDeploy": False,
             "allowPendingChange": True,
             "diskFileName": file_name,
             "type": "scheduleconfigimport"
         }
-        url = self._get_base_url()+'/api/fdm/'+self.version+'/action/configimport'
-        response = requests.post(url, headers=auth_headers, verify=False, data=json.dumps(body))
+        response = self.client.do_post_raw_with_base_url('/action/configimport', 
+                                                         json.dumps(body))
         if response.status_code == 200:
             #success case
             response_json = response.json()
@@ -132,31 +105,6 @@ class BulkTool:
             raise Exception('Triggering import failed with response code: '+str(response.status_code)+" "+str(response))
 
 
-    def _do_get(self, url, limit=None, offset=None):
-        """
-        This method will get data from the passed in URL and will return it in raw form
-
-        Parameters:
-
-        url -- The URL to fetch
-        limit -- The number of records to fetch
-        offset -- The offset to start fetching items from the list
-
-        The return value is the returned data document
-        """
-        auth_headers = self._create_auth_headers()
-        full_url = url
-        append_ampersand = False
-        if limit is not None or offset is not None:
-            full_url += '?'
-        if limit is not None:
-            full_url += 'limit='+str(limit)
-            append_ampersand = True
-        if offset is not None:
-            if append_ampersand:
-                full_url += '&'
-            full_url += 'offset='+str(offset)
-        return requests.get(full_url, headers=auth_headers, verify=False).json()
 
     def _do_get_download_file(self, export_file_name, save_file_name):
         """
@@ -167,9 +115,8 @@ class BulkTool:
         export_file_name -- The name of the file as returned from the status api
         save_file_name -- This is the name to save the export file under
         """
-        auth_headers = self._create_auth_headers()
-        url = self._get_base_url()+'/api/fdm/'+self.version+'/action/downloadconfigfile/%s' % export_file_name
-        response =  requests.get(url, headers=auth_headers, verify=False, stream=True)
+        response = self.client.do_get_raw_with_base_url(f'/action/downloadconfigfile/{export_file_name}', 
+                                                        extra_request_opts={'stream':True})
         if response.status_code == 200:
             # we are good
             with open(save_file_name, 'wb') as filehandle:
@@ -178,7 +125,7 @@ class BulkTool:
         else:
             raise Exception('Error downloading config file code: '+response.status_code)
 
-    def do_download_export_file(self, export_file_name='/tmp/export.zip',  id_list=None, type_list=None, name_list=None, export_type='FULL_EXPORT'):
+    def _do_download_export_file(self, export_file_name='/tmp/export.zip',  id_list=None, type_list=None, name_list=None, export_type='FULL_EXPORT'):
         """
         This method will export the current configuration
 
@@ -194,8 +141,6 @@ class BulkTool:
         No return value for success but an exception will be raised in case of failure.
 
         """
-        auth_headers = self._create_auth_headers()
-
         body = {
             'doNotEncrypt': True,
             'configExportType': export_type,
@@ -217,8 +162,8 @@ class BulkTool:
                     entity_id_list.append('name='+objname)
             body['entityIds'] = entity_id_list
 
-        url = self._get_base_url()+'/api/fdm/'+self.version+'/action/configexport'
-        response = requests.post(url, headers=auth_headers, verify=False, data=json.dumps(body))
+        response = self.client.do_post_raw_with_base_url('/action/configexport', 
+                                                         json.dumps(body))
 
         if response.status_code == 200:
             # Success get job status
@@ -228,13 +173,13 @@ class BulkTool:
             # Spin until job is done
             while True:
                 if job_status_response is not None:
-                    #sleep two seconds so we don't spin too fast
+                    # Sleep two seconds so we don't spin too fast
                     time.sleep(2)
                 job_status_response = self._do_get_export_job_status(job_history_uuid)
                 if job_status_response['status'] != 'IN_PROGRESS' and job_status_response['status'] != 'QUEUED':
                     break
             if job_status_response['status'] == 'SUCCESS':
-                #worked snag the name and download the file
+                # It worked retrieve the name and download the file
                 return self._do_get_download_file(job_status_response['diskFileName'], save_file_name=export_file_name)
             else:
                 raise Exception('Job terminated with unexpected status: '+job_status_response['status'])
@@ -242,7 +187,7 @@ class BulkTool:
             raise Exception('Failed to schedule export job code. Response status code: '+str(response.status_code))
 
 
-    def do_upload_import_dict_list(self, dict_list, upload_file_name_without_path='importfile.txt'):
+    def _do_upload_import_dict_list(self, dict_list, upload_file_name_without_path='importfile.txt'):
         """
         This method will take an import file and upload it to the connected device.
 
@@ -253,12 +198,12 @@ class BulkTool:
 
         Returns the job that was created.
         """
-        auth_headers = self._create_auth_headers()
         # Create some big random numbers to act as the multi-part mime separator
         randtoken = random.randint(1000000, 500000000)
         randtoken2 = random.randint(1000000, 500000000)
         multipart_separator = (str(randtoken)+str(randtoken2))
-        auth_headers['Content-Type'] = 'multipart/form-data; boundary='+multipart_separator
+        additional_headers = {}
+        additional_headers['Content-Type'] = 'multipart/form-data; boundary='+multipart_separator
         # Next form the body of the request
         body = '--'+multipart_separator + '\r\n'
         body += 'Content-Disposition: form-data; name="fileToUpload"; filename="%s"\r\n' % upload_file_name_without_path
@@ -268,8 +213,9 @@ class BulkTool:
         body += json.dumps(dict_list)+'\r\n'
         body += '\r\n--'+multipart_separator + '--\r\n'
 
-        url = self._get_base_url()+'/api/fdm/'+self.version+'/action/uploadconfigfile'
-        response = requests.post(url, headers=auth_headers, verify=False, data=body)
+        response = self.client.do_post_raw_with_base_url('/action/uploadconfigfile',
+                                                         body,
+                                                         additional_headers=additional_headers)
         response_json = response.json()
         logging.debug(response_json)
         if response.status_code == 200:
@@ -283,7 +229,7 @@ class BulkTool:
         else:
             raise Exception('Error uploading import file response code: '+str(response.status_code)+" "+str(response))
 
-    def do_upload_import_file(self, file_name):
+    def _do_upload_import_file(self, file_name):
         """
         This method will take an import file and upload it to the connected device.
 
@@ -298,9 +244,9 @@ class BulkTool:
         else:
             file_name_without_path = os.path.split(file_name)[1]
         with open(file_name) as upload_filehandle:
-            return self.do_upload_import_dict_list(json.loads(upload_filehandle.read()), upload_file_name_without_path=file_name_without_path)
+            return self._do_upload_import_dict_list(json.loads(upload_filehandle.read()), upload_file_name_without_path=file_name_without_path)
 
-    def extract_config_file_from_export(self, export_zip_file, dest_directory):
+    def _extract_config_file_from_export(self, export_zip_file, dest_directory, export_type=None):
         """
         This method will extract the configuration file from the zip file
 
@@ -308,21 +254,38 @@ class BulkTool:
 
         export_zip_file -- This is the input zip file
         dest_directory -- This is the directory to extract the contents into
+        export_type -- Optional specifies the type of export being done (FULL_EXPORT, PENDING_CHANGE_EXPORT or PARTIAL_EXPORT)
 
         Return value is the full path to the extracted config file
         """
         with zipfile.ZipFile(export_zip_file, 'r') as zip_ref:
             zip_ref.extractall(dest_directory) #test for file name
-        config_file_name = dest_directory + '/' + 'full_config.txt'
-        if not os.path.isfile(config_file_name):
-            config_file_name = dest_directory + '/' + 'pending_change_config.txt'
-            if not os.path.isfile(config_file_name):
+        
+        # Possible types: FULL_EXPORT, PENDING_CHANGE_EXPORT and PARTIAL_EXPORT
+        if export_type is not None:
+            # File name logic can be more intelligent if the type is provided
+            if export_type == 'FULL_EXPORT':
+                config_file_name = dest_directory + '/' + 'full_config.txt'
+            elif export_type == 'PENDING_CHANGE_EXPORT':
+                config_file_name = dest_directory + '/' + 'pending_change_config.txt'
+            elif export_type == 'PARTIAL_EXPORT':
                 config_file_name = dest_directory + '/' + 'partial_config.txt'
+            if not os.path.isfile(config_file_name):
+                raise Exception(f'Unable to find config export txt file: {config_file_name}')
+            else:
+                return os.path.normpath(config_file_name)
+        else:    
+            # No type is provided search for the file
+            config_file_name = dest_directory + '/' + 'full_config.txt'
+            if not os.path.isfile(config_file_name):
+                config_file_name = dest_directory + '/' + 'pending_change_config.txt'
                 if not os.path.isfile(config_file_name):
-                    raise Exception('Unable to find config export txt file')
-        return os.path.normpath(config_file_name)
+                    config_file_name = dest_directory + '/' + 'partial_config.txt'
+                    if not os.path.isfile(config_file_name):
+                        raise Exception('Unable to find config export txt file')
+            return os.path.normpath(config_file_name)
 
-    def convert_export_file_to_csv(self, export_zip_file, dest_directory):
+    def _convert_export_file_to_csv(self, export_zip_file, dest_directory, export_type=None):
         """
         This method will take an input zip file and will explode it into a csv file
         per type of object
@@ -330,11 +293,12 @@ class BulkTool:
         Parameters:
         export_zip_file -- This is the fully qualified path to the export zip file
         dest_directory -- This is the destination directory to create the CSV files in (recommend an empty directory)
+        export_type -- Optional specifies the type of export being done (FULL_EXPORT, PENDING_CHANGE_EXPORT or PARTIAL_EXPORT)
 
         Note:  The raw full_config.txt file will be exploded in the dest_directory
         """
         type_to_object_list_dict = {}
-        config_file_name = self.extract_config_file_from_export(export_zip_file, dest_directory)
+        config_file_name = self._extract_config_file_from_export(export_zip_file, dest_directory, export_type=export_type)
         with open(config_file_name) as full_config_json_handle:
             full_export_doc = full_config_json_handle.read()
             full_export_json = json.loads(full_export_doc)
@@ -351,60 +315,6 @@ class BulkTool:
 
         for key_type, value_obj_list in type_to_object_list_dict.items():
             parse_json.dict_list_to_csv(value_obj_list, dest_directory + '/' + key_type+'.csv')
-
-
-    # TODO: Move this to the client class and extract the call to
-    # decorate_dict_list_for_bulk?
-    def do_get_with_paging(self, url, limit=None, filter_system_defined=True):
-        """
-        This method will read in all pages of data and return that as a list
-
-        Parameters:
-
-        url -- The URL to GET
-        limit -- The optional limit of records per page
-
-        Return value is the list of items retrieved.  The assumption is that
-        whatever is returned has a paging wrapper and an "items" list of results.
-        """
-        offset = 0
-        item_count = 0
-        result_list = []
-        while True:
-            result = self._do_get(url, limit=limit, offset=offset)
-            paging = result['paging']
-            items = result['items']
-            item_count += len(items)
-            offset += len(items)
-            result_list.extend(items)
-            if item_count == paging['count'] or len(items) == 0:
-                break
-        if filter_system_defined:
-            remove_list = []
-            for myobject in result_list:
-                if 'isSystemDefined' in myobject and myobject['isSystemDefined'] == True:
-                    remove_list.append(myobject)
-            for remove_item in remove_list:
-                result_list.remove(remove_item)
-
-            parse_json.decorate_dict_list_for_bulk(result_list)
-        return result_list
-
-    # TODO: Move this to the client class?
-    def get_openapi_spec(self):
-        """
-        This method will return the parsed JSON structure of the openapi specification
-        It will be fetched from the server that this client is connected to
-        """
-        auth_headers = self._create_auth_headers()
-        url = self._get_base_url()+'/apispec/ngfw.json'
-        response =  requests.get(url, headers=auth_headers, verify=False)
-        if response.status_code == 200:
-            swagger_json = json.loads(response.text)
-            return swagger_json
-        else:
-            logging.error('Unable to retrieve OpenAPI spec')
-
 
     def _get_referenced_model_set(self, openapi_dict):
         """
@@ -475,14 +385,14 @@ class BulkTool:
                 # the first key and parse it off the front
                 wrapper_obj_to_ref_dict[list(flat_obj)[0].split('.')[0].lower()] = ref_list
         return wrapper_obj_to_ref_dict
-
+    
     def get_object_types(self):
         """This method will take the openapi specification and will determine all object
         types which can be queried via the export API.  This is a rough approximation
         attempting to filter out some of the object types which are not referenced by
         rest APIs or are wrapper classes.
         """
-        openapi_dict = self.get_openapi_spec()
+        openapi_dict = self.client.get_openapi_spec()
 
         # This method will look at the definitions and pulls out all wrappers
         # finding the list of referenced classes that they point to
@@ -504,70 +414,162 @@ class BulkTool:
         referenced_model_list.sort()
         return referenced_model_list
     
-    def bulk_export(self, mode, destination_directory, url=None, type_list=None, id_list=None, name_list=None, output_format='JSON') :
+    def url_export(self, url, destination_directory, output_format='JSON'):
         """
+        This method will retrieve the JSON at a URL and will write out a file to the 
+        passed in destination directory in the requested output format.
+        
+        Parameters:
+        
+        url -- The URL to request the data
+        destination_directory -- The destination directory to write the data to
+        output_format - enum (JSON | CSV | YAML)
+        
+        The path to the directory will be returned for the JSON and the path for the file returned for CSV and YAML
+        """
+        object_list = self.client.do_get_multi_page(url)
+        parse_json.decorate_dict_list_for_bulk(object_list)
+    
+        return_path = None
+        if output_format == 'JSON':
+            logging.info('Exporting in JSON format')
+            print_string_to_file(destination_directory, json.dumps(
+                object_list, indent=3, sort_keys=True))
+            return_path = destination_directory
+            logging.info(f'JSON files can be found in: {destination_directory}')
+    
+        elif output_format == 'CSV':
+            logging.info('Exporting in CSV format')
+            parse_json.dict_list_to_csv(object_list, destination_directory)
+            return_path = destination_directory
+            logging.info(f'CSV files can be found in: {destination_directory}')
+    
+        elif output_format == 'YAML':
+            logging.info('Exporting in YAML format')
+            yaml_file = destination_directory+'/export.yaml'
+            write_dict_to_yaml_file(yaml_file, object_list)
+            return_path = yaml_file
+            logging.info(f'YAML files can be found in: {yaml_file}')
+        return return_path
+    
+    def bulk_export(self, destination_directory,pending_changes=False, type_list=None, id_list=None, name_list=None, output_format='JSON') :
+        """
+        This method will handle FULL_EXPORT, PENDING_CHANGE_EXPORT and PARTIAL_EXPORT however
+        it will not handle URL export that will have its own special method.  PENDING_CHANGE_EXPORT
+        will only include the pending objects it will not include any of the previously deployed
+        objects and it will allow for filtering of those objects.
+        
         Parameters:  
         
-        mode -- This can be either:  'FULL_EXPORT', 'PENDING_CHANGE_EXPORT', 'PARTIAL_EXPORT'
+        destination_directory -- This is the destination directory to write the file to
+        pending_changes -- Boolean (True | False) indicating if only pending changes should be considered
+        type_list -- Python list of type names
+        id_list -- Python list of id strings
+        name_list -- Python list of names 
+        output_format -- enum JSON, CSV, YAML
+        
+        This will return the directory or file path if there is only a single file output
+        (directory for CSV, file for JSON/YAML)
         """
         # Base Case
         mode = 'FULL_EXPORT'
-    
-        # If we have a URL it is a URL export
-        if args.url is not None:
-            args.mode = 'URL_EXPORT'
-            url_export(args, client)
-    
-        # if it is not a URL export lets continue
+           
+        # PENDING_CHANGE_EXPORT called for
+        if pending_changes:
+            mode = 'PENDING_CHANGE_EXPORT'
         else:
-            location_export_zip = os.path.normpath(destination_directory + '/myexport.zip')
-            type_list = None
+            # Note: Pending changes can support filters so the case for partial export is
+            # when pending is not flagged but there is a filter 
+            if type_list is not None or id_list is not None or name_list is not None:
+                mode = 'PARTIAL_EXPORT'
+
+        location_export_zip = os.path.normpath(destination_directory + '/myexport.zip')
+
+        # Download export file
+        self._do_download_export_file(
+            export_file_name=location_export_zip,
+            id_list=id_list,
+            type_list=type_list,
+            name_list=name_list,
+            export_type=mode
+        )
+
+        result_path = None
+        if output_format == 'CSV':
+            logging.info('Exporting in CSV format')
+            self._convert_export_file_to_csv(
+                location_export_zip, destination_directory, export_type=mode)
+            result_path = destination_directory
+            logging.info('CSV files can be found in: '+str(destination_directory))
+            
+        elif output_format == 'JSON':
+            logging.info('Exporting in JSON format')
+            json_file = self._extract_config_file_from_export(
+                location_export_zip, destination_directory, export_type=mode)
+            pretty_print_json_file(json_file)
+            result_path = json_file
+            logging.info('JSON files can be found in: '+str(json_file))
+            
+        elif output_format == 'YAML':
+            logging.info('Exporting in YAML format')
+            json_file = self._extract_config_file_from_export(
+                location_export_zip, destination_directory, export_type=mode)
+            object_list = json.loads(read_string_from_file(json_file))
+            yaml_file = destination_directory+'/export.yaml'
+            write_dict_to_yaml_file(yaml_file, object_list)
+            result_path = yaml_file
+            logging.info('YAML file can be found in: '+str(yaml_file))
+            
+        return result_path
     
-            # PENDING_CHANGE_EXPORT called for
-            if args.pending:
-                args.mode = 'PENDING_CHANGE_EXPORT'
-    
-            # If it is a pending change export we do not support filtering
-            # If there are filter lists defined it is a PARTIAL EXPORT
+    def bulk_import(self, file_list, input_format='JSON'):
+        """
+        This method will import a list of files in the given format
+        
+        Parameters:
+        
+        file_list -- A Python list of files to import
+        input_format -- enum (JSON | CSV | YAML)
+        
+        This will return a bool indicating success
+        """
+        
+        return_result = False
+        if input_format == 'CSV':
+            logging.info('Importing in CSV mode')
+            object_list = []
+            # need to loop  through files and convert to JSON and merge into a single list
+            for inputfile in file_list:
+                object_list.extend(parse_csv.parse_csv_to_dict(inputfile))
+            if self._do_upload_import_dict_list(object_list):
+                logging.info('Successfully completed import')
+                return_result = True
             else:
-                # If we have a filter list it is a PARTIAL_EXPORT for the UI
-                if args.type_list is not None:
-                    type_list = split_string_list(args.type_list)
-                    args.mode = 'PARTIAL_EXPORT'
-                id_list = None
-                if args.id_list is not None:
-                    id_list = split_string_list(args.id_list)
-                    args.mode = 'PARTIAL_EXPORT'
-                name_list = None
-                if args.name_list is not None:
-                    name_list = split_string_list(args.name_list)
-                    args.mode = 'PARTIAL_EXPORT'
+                logging.error('Unable to complete import')
+        elif input_format == 'JSON':
+            logging.info('Importing in JSON mode')
+            #JSON case just merge the JSON docs
+            object_list = []
+            for input_file in file_list:
+                object_list.extend(
+                    json.loads(read_string_from_file(input_file))
+                )
     
-            # Download export file
-            self.do_download_export_file(
-                export_file_name=location_export_zip,
-                id_list=id_list,
-                type_list=type_list,
-                name_list=name_list,
-                export_type=mode
-            )
-            if output_format == 'CSV':
-                logging.info('Exporting in CSV format')
-                self.convert_export_file_to_csv(
-                    location_export_zip, destination_directory)
-                logging.info('CSV files can be found in: '+str(destination_directory))
-            elif output_format == 'JSON':
-                logging.info('Exporting in JSON format')
-                json_file = self.extract_config_file_from_export(
-                    location_export_zip, destination_directory)
-                pretty_print_json_file(json_file)
-                logging.info('JSON files can be found in: '+str(json_file))
-            elif output_format == 'YAML':
-                logging.info('Exporting in YAML format')
-                json_file = self.extract_config_file_from_export(
-                    location_export_zip, destination_directory)
-                object_list = json.loads(read_string_from_file(json_file))
-                yaml_file = destination_directory+'/export.yaml'
-                write_dict_to_yaml_file(yaml_file, object_list)
-                logging.info('YAML file can be found in: '+str(yaml_file))
+            if self._do_upload_import_dict_list(object_list):
+                logging.info('Successfully completed import')
+                return_result = True
+            else:
+                logging.error('Unable to complete import')
+        elif input_format == 'YAML':
+            logging.info('Importing in YAML mode')
+            #JSON case just merge the JSON docs
+            object_list = []
+            for input_file in file_list:
+                object_list.extend(read_yaml_to_dict(input_file))
     
+            if self._do_upload_import_dict_list(object_list):
+                logging.info('Successfully completed import')
+                return_result = True
+            else:
+                logging.error('Unable to complete import')  
+        return return_result
