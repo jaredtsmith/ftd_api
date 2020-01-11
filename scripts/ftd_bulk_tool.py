@@ -196,7 +196,7 @@ def get_args ():
 
     if args.mode == 'EXPORT':
         if not os.path.isdir(args.location):
-            parser.error('Unable to locate provided export directoy: {args.location}')
+            parser.error(f'Unable to locate provided export directory: {args.location}')
 
         if args.pending and args.url is not None:
             logging.warn("URL Export does not support exporting only pending changes. The 'pending' option will be ignored.")
@@ -224,7 +224,7 @@ def fatal(message, error_code=42):
 
 def bulk_export(args, client) :
     if args.url is not None:
-        client.url_export(args.url, args.location, output_format=args.format)
+        return client.url_export(args.url, args.location, output_format=args.format)
             
     # Pre-define lists as none so they are passed down with the proper default
     id_list = None

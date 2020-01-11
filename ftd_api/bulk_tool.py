@@ -433,10 +433,12 @@ class BulkTool:
         return_path = None
         if output_format == 'JSON':
             logging.info('Exporting in JSON format')
-            print_string_to_file(destination_directory, json.dumps(
+            file_path = f'{destination_directory}/export.json'
+            file_path = os.path.normpath(file_path)
+            print_string_to_file(file_path, json.dumps(
                 object_list, indent=3, sort_keys=True))
             return_path = destination_directory
-            logging.info(f'JSON files can be found in: {destination_directory}')
+            logging.info(f'JSON export can be found in: {file_path}')
     
         elif output_format == 'CSV':
             logging.info('Exporting in CSV format')
@@ -447,6 +449,7 @@ class BulkTool:
         elif output_format == 'YAML':
             logging.info('Exporting in YAML format')
             yaml_file = destination_directory+'/export.yaml'
+            yaml_file = os.path.normpath(yaml_file)
             write_dict_to_yaml_file(yaml_file, object_list)
             return_path = yaml_file
             logging.info(f'YAML files can be found in: {yaml_file}')
