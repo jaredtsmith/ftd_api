@@ -17,23 +17,17 @@ Created: Jan 3, 2020
 # TODO: We should normalize on an error handling strategy. Are we propagating
 # exceptions? Exiting? Logging and return code failure?
 
-import json
 import sys
 import os.path
-import ftd_api.parse_json as parse_json
-import ftd_api.parse_csv as parse_csv
 import ftd_api.parse_properties as parse_properties
 from ftd_api.bulk_tool import BulkTool
 from ftd_api.string_helper import split_string_list
-from ftd_api.parse_json import pretty_print_json_file
-from ftd_api.file_helper import read_string_from_file
-from ftd_api.file_helper import print_string_to_file
-from ftd_api.parse_yaml import write_dict_to_yaml_file
-from ftd_api.parse_yaml import read_yaml_to_dict
 
 # Configure Logging
 import logging
 from ftd_api.logging import configure_logging, enable_debug, disable_debug
+from ftd_api.ftd_client import FTDClient
+
 
 
 def main():
@@ -45,28 +39,30 @@ def main():
         # Establish the FTD connection
         logging.info(f'Establishing connection to FTD: https://{args.address}:{args.port}')
         try:
-            client = BulkTool(
-                address=args.address,
-                port=args.port,
-                username=args.username,
-                password=args.password
-            )
+            
+            client = FTDClient(address=args.address,
+                               port=args.port,
+                               username=args.username,
+                               password=args.password)
+            # login to create a session
+            client.login()
+            bulk_client = BulkTool(client)
         except Exception as err:
             logging.critical(f'Unable to connect to FTD')
             raise
 
         # Handle Export
         if args.mode == 'EXPORT':
-            bulk_export(args,client)
+            bulk_export(args,bulk_client)
 
         # Handle Import
         elif args.mode == 'IMPORT':
-            bulk_import(args, client)
+            bulk_import(args, bulk_client)
 
         # Handle Type Listing
         elif args.mode == 'LIST_TYPES':
             type_list = "\n"
-            for type in client.get_object_types():
+            for type in bulk_client.get_object_types():
                 type_list = type_list + f'  {type}\n'
             logging.info(f'Possible types are: {type_list}')
         else:
@@ -200,14 +196,10 @@ def get_args ():
 
     if args.mode == 'EXPORT':
         if not os.path.isdir(args.location):
-            parser.error('Unable to locate provided export directoy: {args.location}')
+            parser.error(f'Unable to locate provided export directory: {args.location}')
 
         if args.pending and args.url is not None:
             logging.warn("URL Export does not support exporting only pending changes. The 'pending' option will be ignored.")
-
-        if args.pending and (args.type_list is not None or args.id_list is not None or args.name_list is not None):
-            logging.warn('Pending change export does not support filtering by id_list, name_list, nor type_list. Filters will be ignored.')
-
 
     elif args.mode == 'IMPORT':
         if args.pending or args.id_list is not None or args.name_list is not None or args.type_list is not None or args.url is not None:
@@ -230,131 +222,38 @@ def fatal(message, error_code=42):
     logging.critical(f'FATAL: {message}')
     exit(error_code)
 
-# TODO: Should bulk_export and bulk_import be the public interface of BulkTool?
-
 def bulk_export(args, client) :
-    # Base Case
-    args.mode = 'FULL_EXPORT'
-
-    # If we have a URL it is a URL export
     if args.url is not None:
-        args.mode = 'URL_EXPORT'
-        url_export(args, client)
+        return client.url_export(args.url, args.location, output_format=args.format)
+            
+    # Pre-define lists as none so they are passed down with the proper default
+    id_list = None
+    type_list = None
+    name_list = None
+    
+    # PENDING_CHANGE_EXPORT called for
+    pending_changes = False
+    if args.pending:
+        pending_changes = True
 
-    # if it is not a URL export lets continue
-    else:
-        location_export_zip = os.path.normpath(args.location + '/myexport.zip')
-        type_list = None
+    # If filter lists are present convert them to Python lists    
+    if args.type_list is not None:
+        type_list = split_string_list(args.type_list)
+    if args.id_list is not None:
+        id_list = split_string_list(args.id_list)
+    if args.name_list is not None:
+        name_list = split_string_list(args.name_list)
 
-        # PENDING_CHANGE_EXPORT called for
-        if args.pending:
-            args.mode = 'PENDING_CHANGE_EXPORT'
-
-        # If it is a pending change export we do not support filtering
-        # If there are filter lists defined it is a PARTIAL EXPORT
-        else:
-            # If we have a filter list it is a PARTIAL_EXPORT for the UI
-            if args.type_list is not None:
-                type_list = split_string_list(args.type_list)
-                args.mode = 'PARTIAL_EXPORT'
-            id_list = None
-            if args.id_list is not None:
-                id_list = split_string_list(args.id_list)
-                args.mode = 'PARTIAL_EXPORT'
-            name_list = None
-            if args.name_list is not None:
-                name_list = split_string_list(args.name_list)
-                args.mode = 'PARTIAL_EXPORT'
-
-        # Download export file
-        client.do_download_export_file(
-            export_file_name=location_export_zip,
-            id_list=id_list,
-            type_list=type_list,
-            name_list=name_list,
-            export_type=args.mode
-        )
-        if args.format == 'CSV':
-            logging.info('Exporting in CSV format')
-            client.convert_export_file_to_csv(
-                location_export_zip, args.location)
-            logging.info('CSV files can be found in: '+str(args.location))
-        elif args.format == 'JSON':
-            logging.info('Exporting in JSON format')
-            json_file = client.extract_config_file_from_export(
-                location_export_zip, args.location)
-            pretty_print_json_file(json_file)
-            logging.info('JSON files can be found in: '+str(json_file))
-        elif args.format == 'YAML':
-            logging.info('Exporting in YAML format')
-            json_file = client.extract_config_file_from_export(
-                location_export_zip, args.location)
-            object_list = json.loads(read_string_from_file(json_file))
-            yaml_file = args.location+'/export.yaml'
-            write_dict_to_yaml_file(yaml_file, object_list)
-            logging.info('YAML file can be found in: '+str(yaml_file))
-
-def url_export(args, client):
-    object_list = client.do_get_with_paging(args.url)
-
-    if args.format == 'JSON':
-        logging.info('Exporting in JSON format')
-        print_string_to_file(args.location, json.dumps(
-            object_list, indent=3, sort_keys=True))
-        logging.info('JSON files can be found in: '+str(args.location))
-
-    elif args.format == 'CSV':
-        logging.info('Exporting in CSV format')
-        parse_json.dict_list_to_csv(object_list, args.location)
-        logging.info('CSV files can be found in: '+str(args.location))
-
-    elif args.format == 'YAML':
-        logging.info('Exporting in YAML format')
-        yaml_file = args.location+'/export.yaml'
-        write_dict_to_yaml_file(yaml_file, object_list)
-        logging.info('YAML files can be found in: '+str(yaml_file))
+    client.bulk_export(args.location, pending_changes, type_list=type_list, id_list=id_list, name_list=name_list, output_format=args.format)            
 
 def bulk_import(args,client):
-    location_list = split_string_list(args.location)
+    file_list = split_string_list(args.location)
 
     if args.format not in ('CSV', 'JSON', 'YAML'):
         logging.error('Format must be specified as CSV, JSON or YAML')
         fatal(None, 11)
 
-    if args.format == 'CSV':
-        logging.info('Importing in CSV mode')
-        object_list = []
-        # need to loop  through files and convert to JSON and merge into a single list
-        for location in location_list:
-            object_list.extend(parse_csv.parse_csv_to_dict(location))
-        if client.do_upload_import_dict_list(object_list):
-            logging.info('Successfully completed import')
-        else:
-            logging.error('Unable to complete import')
-    elif args.format == 'JSON':
-        logging.info('Importing in JSON mode')
-        #JSON case just merge the JSON docs
-        object_list = []
-        for location in location_list:
-            object_list.extend(
-                json.loads(read_string_from_file(location))
-            )
-
-        if client.do_upload_import_dict_list(object_list):
-            logging.info('Successfully completed import')
-        else:
-            logging.error('Unable to complete import')
-    elif args.format == 'YAML':
-        logging.info('Importing in YAML mode')
-        #JSON case just merge the JSON docs
-        object_list = []
-        for location in location_list:
-            object_list.extend(read_yaml_to_dict(location))
-
-        if client.do_upload_import_dict_list(object_list):
-            logging.info('Successfully completed import')
-        else:
-            logging.error('Unable to complete import')
+    client.bulk_import(file_list, input_format=args.format)
 
 if __name__ == '__main__':
     main()

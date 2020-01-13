@@ -15,7 +15,6 @@ import warnings
 import logging
 import time
 
-
 class FTDClient:
     '''
     This is a basic FTD REST client that will assist in generating a login token
@@ -41,6 +40,168 @@ class FTDClient:
 
     def get_address_and_port_string(self):
         return str(self.server_address)+':'+str(self.server_port)
+    
+    def _create_auth_headers(self):
+        """
+        Helper method to fetch standard authorization headers for HTTP calls
+        """
+        auth_headers = {**self.get_headers()}
+        auth_headers['Authorization'] = 'Bearer ' + self.get_access_token()
+        return auth_headers
+
+    def _get_base_url(self):
+        """
+        Helper to fetch base URL
+        """
+        return 'https://'+self.get_address_and_port_string()
+    
+    def do_post_raw(self, additional_url, body, additional_headers=None, extra_request_opts=None):
+        """
+        This method will do a post request and will return the response object
+        
+        Parameters:
+        
+        additional_url -- The URL after the ip and port 
+        body -- The body to post
+        additional_headers -- Other headers to append 
+        extra_request_opts -- These are extra key value args to be passed into the requests post call
+        
+        This method will return the HTTP response object
+        """
+        all_headers = self._create_auth_headers()
+        if additional_headers is not None:
+            all_headers.update(additional_headers)
+
+        url = self._get_base_url() + additional_url
+        logging.debug(f'POST URL: {url}')
+        if extra_request_opts:
+            return requests.post(url, headers=all_headers, verify=False, data=body, **extra_request_opts)
+        else:
+            return requests.post(url, headers=all_headers, verify=False, data=body)
+        
+    def do_post_raw_with_base_url(self, additional_url, body, additional_headers=None, extra_request_opts=None):
+        """
+        This method will do a post request and will return the response object
+        
+        Parameters:
+        
+        additional_url -- The URL after the base FTD-API url /api/fdm/latest/ 
+        body -- The body to post
+        additional_headers -- Other headers to append 
+        extra_request_opts -- These are extra key value args to be passed into the requests post call
+        
+        This method will return the HTTP response object
+        """
+        return self.do_post_raw(f'/api/fdm/{self.version}{additional_url}', 
+                                body, 
+                                additional_headers=additional_headers, 
+                                extra_request_opts=extra_request_opts)
+        
+    def do_get_raw(self, additional_url, additional_headers=None, extra_request_opts=None):
+        """
+        This method does a generic get and takes the entire URI as an argument
+        
+        Parameters:
+        
+        additional_url -- This is the URL starting after the hostname and port
+        additional_headers -- This is any additional header values that need to be passed
+        extra_request_opts -- These are extra args that will be passed through to the requests get call
+        
+        This method will return a raw response object (not JSON)
+        """
+        all_headers = self._create_auth_headers()
+        url = self._get_base_url() + additional_url
+        if additional_headers is not None:
+            all_headers.update(additional_headers)
+        logging.debug(f'GET URL: {url}')
+        if extra_request_opts is not None:
+            return requests.get(url, headers=all_headers, verify=False, **extra_request_opts)
+        else:
+            return requests.get(url, headers=all_headers, verify=False)
+    
+    def do_get_raw_with_base_url(self, additional_url, additional_headers=None, extra_request_opts=None):
+        """
+        This method does a generic get and takes a URI after the base FTD API
+        for example additional_urls is starting after /api/fdm/latest
+        
+        Parameters:
+        
+        additional_url -- The URI starting after the FTD-API base (/api/fdm/latest)
+        additional_headers -- Additional headers that can be added
+        extra_request_opts -- These are extra args that will be passed through to the requests get call
+        
+        This method will return a raw response object (not JSON)
+        """
+        return self.do_get_raw(f'/api/fdm/{self.version}{additional_url}', additional_headers=additional_headers, extra_request_opts=extra_request_opts)
+       
+    def do_get_single_page(self, additional_url, additional_headers=None, limit=None, offset=None):
+        """
+        This method will do a GET and assumes the response is a paged JSON document
+        
+        Parameters:
+
+        additional_url -- This is the URI after the base FTD URI
+        additional_headers -- Additional headers to append
+        limit -- The number of records to fetch
+        offset -- The offset to start fetching items from the list
+
+        The return value is a parsed JSON document
+        """
+        append_ampersand = False
+        if limit is not None or offset is not None:
+            additional_url += '?'
+        if limit is not None:
+            additional_url += f'limit={str(limit)}'
+            append_ampersand = True
+        if offset is not None:
+            if append_ampersand:
+                additional_url += '&'
+            additional_url += f'offset={str(offset)}'
+        return self.do_get_raw_with_base_url(additional_url, additional_headers).json()
+    
+    def do_get_multi_page(self, additional_url, additional_headers=None, limit=None, filter_system_defined=True):
+        """
+        This method will read in all pages of data and return that as a list of 
+        parsed JSON documents.
+
+        Parameters:
+
+        url -- The URL to GET
+        limit -- The optional limit of records per page
+
+        Return value is the list of items retrieved.  The assumption is that
+        whatever is returned has a paging wrapper and an "items" list of results.
+        """
+        offset = 0
+        item_count = 0
+        result_list = []
+        while True:
+            result = self.do_get_single_page(additional_url,
+                                    additional_headers=additional_headers, 
+                                    limit=limit, 
+                                    offset=offset)
+            paging = result['paging']
+            items = result['items']
+            item_count += len(items)
+            offset += len(items)
+            result_list.extend(items)
+            if item_count == paging['count'] or len(items) == 0:
+                break
+        if filter_system_defined:
+            result_list = [x for x in result_list if 'isSystemDefined' not in x or x['isSystemDefined'] == False]
+        return result_list
+
+    def get_openapi_spec(self):
+        """
+        This method will return the parsed JSON structure of the openapi specification
+        It will be fetched from the server that this client is connected to
+        """
+        response = self.do_get_raw('/apispec/ngfw.json')
+        if response.status_code == 200:
+            swagger_json = json.loads(response.text)
+            return swagger_json
+        else:
+            logging.error('Unable to retrieve OpenAPI spec')
 
     def __init__(self, address='192.168.1.1', port=443, username="admin", password="Admin123", version='latest'):
         """
