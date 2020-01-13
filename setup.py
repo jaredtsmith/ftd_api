@@ -27,10 +27,12 @@ setuptools.setup(
     classifiers=[
         'Development Status :: 3 - Alpha',
         "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.6",
+        "Programming Language :: Python :: 3.7",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    python_requires='>=3.4',
+    python_requires='>=3.6',
     keywords='cisco firepower ftd ngfw rest api',
     install_requires=[
         'pyaml',
