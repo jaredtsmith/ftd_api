@@ -480,6 +480,8 @@ class BulkTool:
         # PENDING_CHANGE_EXPORT called for
         if pending_changes:
             mode = 'PENDING_CHANGE_EXPORT'
+            if type_list is not None or id_list is not None or name_list is not None:
+                raise Exception('PENDING_CHANGE_EXPORT cannot be used with entityIds filter list')
         else:
             # Note: Pending changes can support filters so the case for partial export is
             # when pending is not flagged but there is a filter 
