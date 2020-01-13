@@ -30,7 +30,17 @@ def pretty_print_json_file(json_file):
     """
     json_data = json.loads(read_string_from_file(json_file))
     print_string_to_file(json_file, json.dumps(json_data, indent=3, sort_keys=True))
-
+    
+def pretty_print_json_string(json_string):
+    """
+    This method takes as input a json string and converts it to a pretty printed json string
+    
+    Return:
+    
+    Pretty formatted JSON string
+    """
+    parsed_json = json.loads(json_string)
+    return json.dumps(parsed_json, indent=3, sort_keys=True)
 
 def get_keys_from_dict(my_dict, path_set, current_path=None, path_to_value_dict=None):
     """

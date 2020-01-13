@@ -14,6 +14,7 @@ import json
 import warnings
 import logging
 import time
+from ftd_api.parse_json import pretty_print_json_string
 
 class FTDClient:
     '''
@@ -73,11 +74,17 @@ class FTDClient:
             all_headers.update(additional_headers)
 
         url = self._get_base_url() + additional_url
-        logging.debug(f'POST URL: {url}')
+        if logging.getLogger().isEnabledFor(logging.DEBUG):
+            logging.debug(f'POST URL: {url}')
+            logging.debug(f'POST body: {pretty_print_json_string(body)}')
         if extra_request_opts:
-            return requests.post(url, headers=all_headers, verify=False, data=body, **extra_request_opts)
+            response_payload = requests.post(url, headers=all_headers, verify=False, data=body, **extra_request_opts)
         else:
-            return requests.post(url, headers=all_headers, verify=False, data=body)
+            response_payload = requests.post(url, headers=all_headers, verify=False, data=body)
+        if logging.getLogger().isEnabledFor(logging.DEBUG):
+            if 'Content-Type' in response_payload.headers and response_payload.headers['Content-Type'].find('application/json') != -1:
+                logging.debug(f'Response Payload: {str(pretty_print_json_string(response_payload.text))}')
+        return response_payload
         
     def do_post_raw_with_base_url(self, additional_url, body, additional_headers=None, extra_request_opts=None):
         """
@@ -113,11 +120,16 @@ class FTDClient:
         url = self._get_base_url() + additional_url
         if additional_headers is not None:
             all_headers.update(additional_headers)
-        logging.debug(f'GET URL: {url}')
+        if logging.getLogger().isEnabledFor(logging.DEBUG):
+            logging.debug(f'GET URL: {url}')
         if extra_request_opts is not None:
-            return requests.get(url, headers=all_headers, verify=False, **extra_request_opts)
+            response_payload = requests.get(url, headers=all_headers, verify=False, **extra_request_opts)
         else:
-            return requests.get(url, headers=all_headers, verify=False)
+            response_payload = requests.get(url, headers=all_headers, verify=False)
+        if logging.getLogger().isEnabledFor(logging.DEBUG):
+            if 'Content-Type' in response_payload.headers and response_payload.headers['Content-Type'].find('application/json') != -1:
+                logging.debug(f'Response Payload: {str(pretty_print_json_string(response_payload.text))}')
+        return response_payload
     
     def do_get_raw_with_base_url(self, additional_url, additional_headers=None, extra_request_opts=None):
         """
