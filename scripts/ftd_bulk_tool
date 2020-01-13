@@ -1,2 +1,2 @@
 #!/bin/sh
-./ftd_bulk_tool.py $@
+$(dirname $0)/ftd_bulk_tool.py $@
