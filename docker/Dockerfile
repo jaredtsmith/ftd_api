@@ -30,40 +30,8 @@ RUN pip3 install virtualenv
 RUN pip3 install ipython
 RUN pip3 install pyaml
 RUN pip3 install coloredlogs
-#RUN mkdir /code
-#COPY code /code/
-
-#ARG FTD_ANSIBLE_VERSION=v0.2.1
-#ARG FTD_ANSIBLE_FOLDER=ftd-ansible
-
-#RUN wget https://github.com/CiscoDevNet/FTDAnsible/archive/${FTD_ANSIBLE_VERSION}.tar.gz && \
-#    tar -xvf ${FTD_ANSIBLE_VERSION}.tar.gz
-
-#RUN mkdir /${FTD_ANSIBLE_FOLDER}/ && \
-#    export FTD_SOURCE_FOLDER=`find ./ -maxdepth 1 -type d -name '*FTDAnsible-*'` && \
-#    mv $FTD_SOURCE_FOLDER/httpapi_plugins /${FTD_ANSIBLE_FOLDER} && \
-#    mv $FTD_SOURCE_FOLDER/library /${FTD_ANSIBLE_FOLDER} && \
-#    mv $FTD_SOURCE_FOLDER/module_utils /${FTD_ANSIBLE_FOLDER} && \
-#    mv $FTD_SOURCE_FOLDER/requirements.txt /${FTD_ANSIBLE_FOLDER} && \
-#    mv $FTD_SOURCE_FOLDER/ansible.cfg  /${FTD_ANSIBLE_FOLDER}
-
-#RUN pip install --no-cache-dir -r /${FTD_ANSIBLE_FOLDER}/requirements.txt
-
-#ENV PYTHONPATH="$PYTHONPATH:/${FTD_ANSIBLE_FOLDER}/"
-#WORKDIR /${FTD_ANSIBLE_FOLDER}
-
-#RUN echo "export PYTHONPATH=$PYTHONPATH:/code" >> ~/.bashrc
+RUN pip3 install -i https://test.pypi.org/simple/ ftd-api
 RUN echo "alias python=python3" >> ~/.bashrc
-#RUN mkdir -p /ftd-ansible/playbooks
-#COPY playbooks /ftd-ansible/playbooks
-#RUN mkdir -p /etc/ansible
-#COPY hosts /etc/ansible/hosts
-#symlink python
 RUN ln -s /usr/bin/python3 /usr/bin/python
-#RUN cp /ftd-ansible/module_utils/* /usr/local/lib/python3.6/dist-packages/ansible/module_utils/network/ftd/
-#RUN cp /ftd-ansible/httpapi_plugins/* /usr/local/lib/python3.6/dist-packages/ansible/plugins/httpapi/
-#RUN cp /ftd-ansible/library/* /usr/local/lib/python3.6/dist-packages/ansible/modules/network/ftd/
-#RUN cp /ftd-ansible/ansible.cfg /etc/ansible/
-#RUN sed -i 's/\.\//\/ftd-ansible\//' /etc/ansible/ansible.cfg
 
 

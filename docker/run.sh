@@ -1,1 +1,1 @@
-winpty docker run --name ftdimportexport -it ftdimportexport
+docker run --name ftdimportexport -it ftdimportexport
