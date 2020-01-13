@@ -200,6 +200,8 @@ def get_args ():
 
         if args.pending and args.url is not None:
             logging.warn("URL Export does not support exporting only pending changes. The 'pending' option will be ignored.")
+        if args.pending and (args.type_list is not None or args.id_list is not None or args.name_list is not None):
+            parser.error(f'Filter criteria (id_list, name_list, type_list) are not supported with the pending option please remove the filter criteria')
 
     elif args.mode == 'IMPORT':
         if args.pending or args.id_list is not None or args.name_list is not None or args.type_list is not None or args.url is not None:
