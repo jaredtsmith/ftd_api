@@ -6,7 +6,7 @@ Please note that this API is only accessible when the device is not managed by a
 
 ## Installation
 
-### From Pypi (COMING SOON)
+### From Pypi
 
 `pip install ftd_api`
 
@@ -79,11 +79,11 @@ If you have installed the package the bulk tool `ftd_bulk_tool` should be in you
 
 For those of you wishing to contribute: Fork this repo, clone your fork, then execute the following commands:
 
-    cd ftd-api
+    cd ftd_api
     python3 setup.py sdist
     pip3 install -e .
 
-This will build the source distribution and then install it onto your development system using symlinks so that as you modify the code you are using your checkout (as opposed to installing a copy of it). Note that this will work just the way you want it to in a [virtualenv](https://virtualenvwrapper.readthedocs.io/en/latest/)
+This will build the source distribution and then install it onto your development system using symlinks (as opposed to installing a copy of it) so that as you modify the code it will take effect immediately. Note that this will work just the way you want it to in a [virtualenv](https://virtualenvwrapper.readthedocs.io/en/latest/)
 
 ### Running Tests
 

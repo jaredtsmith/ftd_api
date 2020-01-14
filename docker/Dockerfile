@@ -31,7 +31,8 @@ RUN pip3 install ipython
 #RUN pip3 install pyaml
 #RUN pip3 install coloredlogs
 #RUN pip3 install -i https://test.pypi.org/simple/ ftd-api
-RUN pip3 install --extra-index-url=https://test.pypi.org/simple/ ftd-api
+#RUN pip3 install --extra-index-url=https://test.pypi.org/simple/ ftd-api
+RUN pip3 install ftd_api
 RUN echo "alias python=python3" >> ~/.bashrc
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
