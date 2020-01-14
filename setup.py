@@ -35,9 +35,9 @@ setuptools.setup(
     python_requires='>=3.6',
     keywords='cisco firepower ftd ngfw rest api',
     install_requires=[
-        'pyaml',
-        'requests',
-        'coloredlogs'
+        'pyaml>=19.12.0',
+        'requests>=2.22.0',
+        'coloredlogs>=10.0'
     ],
     project_urls={
         'Source': 'https://github.com/jaredtsmith/ftd_api',
