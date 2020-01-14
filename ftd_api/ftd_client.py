@@ -76,7 +76,9 @@ class FTDClient:
         url = self._get_base_url() + additional_url
         if logging.getLogger().isEnabledFor(logging.DEBUG):
             logging.debug(f'POST URL: {url}')
-            logging.debug(f'POST body: {pretty_print_json_string(body)}')
+            if 'Content-Type' in all_headers and all_headers['Content-Type'].find('json') != -1:
+                # Only log this for JSON document types
+                logging.debug(f'POST body: {pretty_print_json_string(body)}')
         if extra_request_opts:
             response_payload = requests.post(url, headers=all_headers, verify=False, data=body, **extra_request_opts)
         else:

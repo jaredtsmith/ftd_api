@@ -91,6 +91,7 @@ class BulkTool:
             while True:
                 status = self._get_import_status(response_json['jobHistoryUuid'])
                 if status.status_code == 200 and status.json()['status'] != 'IN_PROGRESS':
+                    # 200 and not in progress is a terminal state
                     return status.json()
                 elif status.status_code == 200 and status.json()['status'] == 'IN_PROGRESS':
                     # Pause to avoid going too fast in the case that it is still
@@ -100,6 +101,10 @@ class BulkTool:
                 elif status.status_code != 503:
                     # 503 indicates backend busy allow that and try again
                     raise Exception('Error getting import job status: '+str(status.status_code)+" "+str(status))
+                else:
+                    # Only remaining case is status == 503 indicating that we need to wait
+                    # and try again we need to sleep in this case
+                    time.sleep(1)
 
         else:
             raise Exception('Triggering import failed with response code: '+str(response.status_code)+" "+str(response))
@@ -559,7 +564,7 @@ class BulkTool:
                 object_list.extend(
                     json.loads(read_string_from_file(input_file))
                 )
-    
+
             if self._do_upload_import_dict_list(object_list):
                 logging.info('Successfully completed import')
                 return_result = True
