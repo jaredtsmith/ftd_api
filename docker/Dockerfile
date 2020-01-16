@@ -31,4 +31,4 @@ RUN pip3 install ftd-api
 RUN echo "alias python=python3" >> ~/.bashrc
 RUN ln -s /usr/bin/python3 /usr/bin/python
 COPY files/client.prop /root
-
+COPY sampledata/* /root/sampledata

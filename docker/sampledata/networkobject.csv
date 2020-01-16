@@ -1,0 +1,13 @@
+action,data.dnsResolution,data.isSystemDefined(bool),data.name,data.subType,data.type,data.value,type
+EDIT,-=NONE/NULL=-,FALSE,192.168.1.x,NETWORK,networkobject,192.168.1.0/24,identitywrapper
+EDIT,-=NONE/NULL=-,FALSE,192.168.2.x,NETWORK,networkobject,192.168.2.0/24,identitywrapper
+EDIT,-=NONE/NULL=-,FALSE,192.168.3.x,NETWORK,networkobject,192.168.3.0/24,identitywrapper
+EDIT,-=NONE/NULL=-,FALSE,192.168.4.x,NETWORK,networkobject,192.168.4.0/24,identitywrapper
+EDIT,-=NONE/NULL=-,FALSE,192.168.5.x,NETWORK,networkobject,192.168.5.0/24,identitywrapper
+EDIT,-=NONE/NULL=-,FALSE,192.168.6.x,NETWORK,networkobject,192.168.6.0/24,identitywrapper
+EDIT,-=NONE/NULL=-,FALSE,192.168.7.x,NETWORK,networkobject,192.168.7.0/24,identitywrapper
+EDIT,-=NONE/NULL=-,FALSE,192.168.8.x,NETWORK,networkobject,192.168.8.0/24,identitywrapper
+EDIT,-=NONE/NULL=-,FALSE,192.168.9.x,NETWORK,networkobject,192.168.9.0/24,identitywrapper
+EDIT,-=NONE/NULL=-,FALSE,192.168.10.x,NETWORK,networkobject,192.168.10.0/24,identitywrapper
+EDIT,-=NONE/NULL=-,FALSE,192.168.11.x,NETWORK,networkobject,192.168.11.0/24,identitywrapper
+EDIT,-=NONE/NULL=-,FALSE,192.168.12.x,NETWORK,networkobject,192.168.12.0/24,identitywrapper
