@@ -28,4 +28,4 @@ def read_yaml_to_dict(yaml_file):
     yaml_file -- This is the file to load
     """
     with open(yaml_file, 'r') as file_handle:
-        return yaml.load(file_handle)
+        return yaml.load(file_handle, Loader=yaml.FullLoader)
