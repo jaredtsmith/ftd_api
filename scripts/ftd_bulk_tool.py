@@ -34,7 +34,7 @@ def main():
 
     configure_logging()
     args = get_args()
-
+    
     try:
         # Establish the FTD connection
         logging.info(f'Establishing connection to FTD: https://{args.address}:{args.port}')
@@ -53,7 +53,7 @@ def main():
 
         # Handle Export
         if args.mode == 'EXPORT':
-            bulk_export(args,bulk_client)
+            bulk_export(args, bulk_client)
 
         # Handle Import
         elif args.mode == 'IMPORT':
@@ -89,7 +89,6 @@ def get_args ():
         # don't capture the help flag with this parser
         add_help = False
     )
-
     config_file_parser.add_argument(
         '-c', '--config_file',
         metavar='FILE_NAME',
@@ -109,7 +108,6 @@ def get_args ():
         config_dict = parse_properties.file_to_dict(args.config_file)
         config_dict['config_file'] = args.config_file
         defaults.update(config_dict)
-
     parser = argparse.ArgumentParser(
         # Use the header docstring as the description
         description = 'This tool provides a simple abstraction to handle bulk import/export tasks via the Firepower Threat Defese REST API.',
@@ -146,7 +144,6 @@ def get_args ():
         '-p','--password',
         help="The password to login with. Default: 'Admin123'"
     )
-
 
     # Import and Export Options
     parser.add_argument(
@@ -185,7 +182,6 @@ def get_args ():
         '-t','--type_list',
         help="Comma separated list of types to export. This is essentially a filter by type on the export. Only valid for EXPORT mode. Ignored if 'url' or 'pending' are supplied"
     )
-
     args = parser.parse_args(remaining_argv)
 
     # Let's do all the up front validation we can based solely on the input
@@ -193,7 +189,6 @@ def get_args ():
         enable_debug()
     else:
         disable_debug()
-
     if args.mode == 'EXPORT':
         if not os.path.isdir(args.location):
             parser.error(f'Unable to locate provided export directory: {args.location}')
@@ -204,8 +199,9 @@ def get_args ():
             parser.error(f'Filter criteria (id_list, name_list, type_list) are not supported with the pending option please remove the filter criteria')
 
     elif args.mode == 'IMPORT':
-        if args.pending or args.id_list is not None or args.name_list is not None or args.type_list is not None or args.url is not None:
-            parser.error('The following options are not valid with the IMPORT command: --url, --name_list, --type_list, --id_list')
+        if args.pending or args.url is not None:
+            # We do allow type, name, id filters for import they act as exclude filters on the import set
+            parser.error('The following options are not valid with the IMPORT command: --url, -e')
 
             #Location for import is either a single file, or list of files (comma delimited)
             for file in split_string_list(args.location):
@@ -254,8 +250,25 @@ def bulk_import(args,client):
     if args.format not in ('CSV', 'JSON', 'YAML'):
         logging.error('Format must be specified as CSV, JSON or YAML')
         fatal(None, 11)
+        
+    # Pre-define lists as none so they are passed down with the proper default
+    id_list = None
+    type_list = None
+    name_list = None
 
-    client.bulk_import(file_list, input_format=args.format)
+    # If filter exclude lists are present convert them to Python lists    
+    if args.type_list is not None:
+        type_list = split_string_list(args.type_list)
+    if args.id_list is not None:
+        id_list = split_string_list(args.id_list)
+    if args.name_list is not None:
+        name_list = split_string_list(args.name_list)
+
+    client.bulk_import(file_list, 
+                       input_format=args.format,
+                       type_list=type_list,
+                       id_list=id_list,
+                       name_list=name_list)
 
 if __name__ == '__main__':
     main()

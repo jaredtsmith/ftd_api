@@ -68,13 +68,14 @@ class BulkTool:
         """
         return self.client.do_get_raw_with_base_url(f'/jobs/configimportstatus/{str(job_history_id)}')
 
-    def _do_import_file(self, file_name):
+    def _do_import_file(self, file_name, entity_filter_list=None):
         """
         This method will do the actual import of the configuration file
 
         Parameters:
 
         file_name -- The file name to import (as returned by the upload method not fully qualified)
+        entity_filter_list -- See _create_entity_filter
         """
         body = {
             "autoDeploy": False,
@@ -82,6 +83,8 @@ class BulkTool:
             "diskFileName": file_name,
             "type": "scheduleconfigimport"
         }
+        if entity_filter_list:
+            body['excludeEntities'] = entity_filter_list
         response = self.client.do_post_raw_with_base_url('/action/configimport', 
                                                          json.dumps(body))
         if response.status_code == 200:
@@ -117,7 +120,7 @@ class BulkTool:
         save under the save_file_name on the filesystem.
 
         Parameters:
-        export_file_name -- The name of the file as returned from the status api
+        export_file_name -- The name of the file as returned from the status api or the jobHistoryUuid value
         save_file_name -- This is the name to save the export file under
         """
         response = self.client.do_get_raw_with_base_url(f'/action/downloadconfigfile/{export_file_name}', 
@@ -130,7 +133,41 @@ class BulkTool:
         else:
             raise Exception('Error downloading config file code: '+response.status_code)
 
-    def _do_download_export_file(self, export_file_name='/tmp/export.zip',  id_list=None, type_list=None, name_list=None, export_type='FULL_EXPORT'):
+
+    def _create_entity_filter(self, id_list, type_list, name_list):
+        """
+        This creates a filter list structure as is used in both the import
+        and export flows.
+        
+        This will return a list of elements like:
+        "type=<type name>"
+        "name=<object name>"
+        "<id>"
+        
+        Parameters:
+        id_list -- This is the list of ID values you would like to filter
+        type_list -- This is the list of types you would like to filter
+        name_list -- This is the list of names you would like to filter
+        """
+        entity_filter_list = None
+        # Create string to pass to the back-end with filter criteria
+        if id_list is not None or type_list is not None or name_list is not None:
+            entity_filter_list = []
+            if id_list:
+                entity_filter_list.extend(id_list)
+            if type_list:
+                for objtype in type_list:
+                    entity_filter_list.append('type=' + objtype)
+            
+            if name_list:
+                for objname in name_list:
+                    entity_filter_list.append('name=' + objname)
+        
+        return entity_filter_list
+
+    def _do_download_export_file(self, export_file_name='/tmp/export.zip',  
+                                 id_list=None, type_list=None, name_list=None, 
+                                 export_type='FULL_EXPORT'):
         """
         This method will export the current configuration
 
@@ -153,19 +190,10 @@ class BulkTool:
             'type': 'scheduleconfigexport'
             }
 
-        # Additional validation for entity_id_list usage
-        if id_list is not None or type_list is not None or name_list is not None:
-            # Create string to pass to the backend with filter criteria
-            entity_id_list = []
-            if id_list:
-                entity_id_list.extend(id_list)
-            if type_list:
-                for objtype in type_list:
-                    entity_id_list.append('type='+objtype)
-            if name_list:
-                for objname in name_list:
-                    entity_id_list.append('name='+objname)
-            body['entityIds'] = entity_id_list
+        # Additional validation for entity_filter_list usage
+        entity_filter_list = self._create_entity_filter(id_list, type_list, name_list)
+        if entity_filter_list:
+            body['entityIds'] = entity_filter_list
 
         response = self.client.do_post_raw_with_base_url('/action/configexport', 
                                                          json.dumps(body))
@@ -185,14 +213,17 @@ class BulkTool:
                     break
             if job_status_response['status'] == 'SUCCESS':
                 # It worked retrieve the name and download the file
-                return self._do_get_download_file(job_status_response['diskFileName'], save_file_name=export_file_name)
+                return self._do_get_download_file(job_history_uuid, save_file_name=export_file_name)
             else:
                 raise Exception('Job terminated with unexpected status: '+job_status_response['status'])
         else:
             raise Exception('Failed to schedule export job code. Response status code: '+str(response.status_code))
 
 
-    def _do_upload_import_dict_list(self, dict_list, upload_file_name_without_path='importfile.txt'):
+    def _do_upload_import_dict_list(self, 
+                                    dict_list, 
+                                    upload_file_name_without_path='importfile.txt', 
+                                    entity_filter_list=None):
         """
         This method will take an import file and upload it to the connected device.
 
@@ -200,6 +231,7 @@ class BulkTool:
 
         dict_list -- The list of dictionary objects
         upload_file_name_without_path -- Optional custom name to specify for file uploads
+        entity_filter_list -- See _create_entity_filter
 
         Returns the job that was created.
         """
@@ -225,7 +257,7 @@ class BulkTool:
         logging.debug(response_json)
         if response.status_code == 200:
             # success case trigger import to take place
-            status_response = self._do_import_file(response_json['diskFileName'])
+            status_response = self._do_import_file(response_json['diskFileName'], entity_filter_list=entity_filter_list)
             logging.debug(status_response)
             if status_response['status'] == 'SUCCESS':
                 return True
@@ -460,7 +492,7 @@ class BulkTool:
             logging.info(f'YAML files can be found in: {yaml_file}')
         return return_path
     
-    def bulk_export(self, destination_directory,pending_changes=False, type_list=None, id_list=None, name_list=None, output_format='JSON') :
+    def bulk_export(self, destination_directory, pending_changes=False, type_list=None, id_list=None, name_list=None, output_format='JSON') :
         """
         This method will handle FULL_EXPORT, PENDING_CHANGE_EXPORT and PARTIAL_EXPORT however
         it will not handle URL export that will have its own special method.  PENDING_CHANGE_EXPORT
@@ -532,7 +564,8 @@ class BulkTool:
             
         return result_path
     
-    def bulk_import(self, file_list, input_format='JSON'):
+    def bulk_import(self, file_list, input_format='JSON', 
+                    id_list=None, type_list=None, name_list=None):
         """
         This method will import a list of files in the given format
         
@@ -540,18 +573,22 @@ class BulkTool:
         
         file_list -- A Python list of files to import
         input_format -- enum (JSON | CSV | YAML)
+        id_list -- IDs to exclude from the import package
+        type_list -- Types to exclude from the import package
+        name_list -- Names to exclude from the import package
         
         This will return a bool indicating success
         """
-        
         return_result = False
+        
+        entity_filter_list = self._create_entity_filter(id_list=id_list, type_list=type_list, name_list=name_list)
         if input_format == 'CSV':
             logging.info('Importing in CSV mode')
             object_list = []
             # need to loop  through files and convert to JSON and merge into a single list
             for inputfile in file_list:
                 object_list.extend(parse_csv.parse_csv_to_dict(inputfile))
-            if self._do_upload_import_dict_list(object_list):
+            if self._do_upload_import_dict_list(object_list, entity_filter_list=entity_filter_list):
                 logging.info('Successfully completed import')
                 return_result = True
             else:
@@ -565,7 +602,7 @@ class BulkTool:
                     json.loads(read_string_from_file(input_file))
                 )
 
-            if self._do_upload_import_dict_list(object_list):
+            if self._do_upload_import_dict_list(object_list, entity_filter_list=entity_filter_list):
                 logging.info('Successfully completed import')
                 return_result = True
             else:
@@ -577,7 +614,7 @@ class BulkTool:
             for input_file in file_list:
                 object_list.extend(read_yaml_to_dict(input_file))
     
-            if self._do_upload_import_dict_list(object_list):
+            if self._do_upload_import_dict_list(object_list, entity_filter_list=entity_filter_list):
                 logging.info('Successfully completed import')
                 return_result = True
             else:
