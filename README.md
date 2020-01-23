@@ -59,20 +59,20 @@ If you have installed the package the bulk tool `ftd_bulk_tool` should be in you
                             mode. Ignored if 'url' is supplied
     -i ID_LIST, --id_list ID_LIST
                             A Comma-separated list of ID values to export or remove
-                            from an import. This is essentially a filter by id 
+                            from an import. This is essentially a filter by id
                             on the export or an exclusion filter on import. Valid
                             for IMPORT and EXPORT mode. Ignored if 'url' or 'pending'
                             are supplied.
     -n NAME_LIST, --name_list NAME_LIST
                             A Comma-separated list of names to export or remove
-                            from an import. This is essentially a filter by name 
-                            on the export or an exclusion filter on import. Valid 
+                            from an import. This is essentially a filter by name
+                            on the export or an exclusion filter on import. Valid
                             for IMPORT and EXPORT modes. Ignored if 'url' or 'pending'
                             are supplied.
     -t TYPE_LIST, --type_list TYPE_LIST
                             A Comma-separated list of types to export or remove
-                            from an import. This is essentially a filter by type 
-                            on the export or an exclusion filter on import. Valid 
+                            from an import. This is essentially a filter by type
+                            on the export or an exclusion filter on import. Valid
                             for IMPORT and EXPORT modes. Ignored if 'url' or 'pending'
                             are supplied.
 
