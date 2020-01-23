@@ -17,7 +17,7 @@ RUN apt-get install -y inetutils-ping
 RUN apt-get install -y telnet 
 RUN apt-get install -y nano
 # update version of requests library to latest
-
+RUN pip install --upgrade pip
 RUN pip3 install --upgrade pip
 RUN pip3 install virtualenv
 RUN pip3 uninstall -y urllib3 
@@ -27,7 +27,7 @@ RUN pip3 install bravado
 RUN pip3 install PyJWT
 RUN pip3 install virtualenv
 RUN pip3 install ipython
-RUN pip3 install ftd-api
+RUN pip3 install --no-cache-dir ftd-api
 RUN echo "alias python=python3" >> ~/.bashrc
 RUN ln -s /usr/bin/python3 /usr/bin/python
 COPY files/client.prop /root
