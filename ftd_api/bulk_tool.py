@@ -93,10 +93,15 @@ class BulkTool:
             # Now that we have successfully scheduled it let's check for status on the job
             while True:
                 status = self._get_import_status(response_json['jobHistoryUuid'])
-                if status.status_code == 200 and status.json()['status'] != 'IN_PROGRESS':
+                # IN_PROGRESS and QUEUED are the two "working states" where it will still do more work
+                if status.status_code == 200 and status.json()['status'] not in ('IN_PROGRESS', 'QUEUED'):
                     # 200 and not in progress is a terminal state
                     return status.json()
-                elif status.status_code == 200 and status.json()['status'] == 'IN_PROGRESS':
+                elif (status.status_code == 200 and status.json()['status'] in ('IN_PROGRESS', 'QUEUED')) or status.status_code == 423:
+                    # Two cases here:
+                    # Case return code 200:  This is a positive message saying we are queued waiting to run or we are in progress and running
+                    # Case return code 423:  This is a DB lock exception this can happen in some cases where the DB is temporarily locked we 
+                    #                        should wait and try again
                     # Pause to avoid going too fast in the case that it is still
                     # in progress
                     time.sleep(1)
