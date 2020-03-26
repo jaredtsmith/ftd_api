@@ -16,6 +16,7 @@ from ftd_api.file_helper import read_string_from_file
 from ftd_api.parse_yaml import write_dict_to_yaml_file
 from ftd_api.parse_yaml import read_yaml_to_dict
 from ftd_api.file_helper import print_string_to_file
+from requests.exceptions import ConnectionError
 import time
 import json
 import random
@@ -92,7 +93,13 @@ class BulkTool:
             response_json = response.json()
             # Now that we have successfully scheduled it let's check for status on the job
             while True:
-                status = self._get_import_status(response_json['jobHistoryUuid'])
+                try:
+                    status = self._get_import_status(response_json['jobHistoryUuid'])
+                except ConnectionError:
+                    # On occasion status will return an error keep spinning and try again
+                    logging.warning('Error obtaining import status trying again.')
+                    time.sleep(1)
+                    continue
                 # IN_PROGRESS and QUEUED are the two "working states" where it will still do more work
                 if status.status_code == 200 and status.json()['status'] not in ('IN_PROGRESS', 'QUEUED'):
                     # 200 and not in progress is a terminal state
