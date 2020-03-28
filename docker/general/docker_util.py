@@ -50,6 +50,7 @@ def create_mount_point(original_file_path, target_path):
         exit -1
 
 if __name__ == '__main__':
+    DOCKER_NAME = 'ciscongfw/ftdimportexportcmd'
     import sys
     import os.path
     import subprocess
@@ -106,6 +107,6 @@ if __name__ == '__main__':
     else:
         args[file_path_index] = target_path
 
-    full_cmd = ['docker', 'run']+target_cmd_array_location+ target_cmd_array_properties+['ftdimportexport'] + args
+    full_cmd = ['docker', 'run']+target_cmd_array_location+ target_cmd_array_properties+[DOCKER_NAME] + args
     print('Executing command: '+' '.join(full_cmd))
     subprocess.run(full_cmd)
