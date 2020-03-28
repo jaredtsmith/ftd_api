@@ -68,6 +68,10 @@ if __name__ == '__main__':
             break
         count += 1
 
+    if file_path_index == -1:
+        print('ERROR -l file is missing')
+        exit(-1)
+
     original_path = args[file_path_index]
     file_path = os.path.abspath(original_path)
 
@@ -87,6 +91,10 @@ if __name__ == '__main__':
             file_path_index = count + 1
             break
         count += 1
+
+    if file_path_index == -1:
+        print('ERROR -c file is missing')
+        exit(-1)
 
     original_path = args[file_path_index]
     file_path = os.path.abspath(original_path)
