@@ -30,7 +30,7 @@ ftd_bulk_tool(){
             location="$var"
             SAVEL=false
             first_half_command+=("-v ")
-            if [ $OS='Windows_NT' ]
+            if [ ! -z "$OS" -a $OS='Windows_NT' ]
             then
                 #Fixup path for cygwin/gitbash
                 var=`cygpath -m $var|sed 's,/,\\\\,g'`
@@ -50,7 +50,7 @@ ftd_bulk_tool(){
             file=`basename "$var"`
             SAVEC=false
             first_half_command+=("-v ")
-            if [ $OS='Windows_NT' ]
+            if [ ! -z "$OS" -a $OS='Windows_NT' ]
             then
                 #Fixup path for cygwin/gitbash
                 location=`cygpath -m $location|sed 's,/,\\\\,g'`
