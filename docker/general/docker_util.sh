@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/bin/bash
 # docker_util.sh
 #
 #This tool provides a simple abstraction to handle bulk import/export tasks via the Firepower Threat Defese REST API.
@@ -74,4 +74,10 @@ ftd_bulk_tool(){
     eval "$FULL_first_half_command"
 }
 
-ftd_bulk_tool $@
+
+(return 0 2>/dev/null) && sourced=1 || sourced=0
+if [ $sourced -eq 0 ]
+then
+    # Only run tool if we are not being sourced
+    ftd_bulk_tool $@
+fi
