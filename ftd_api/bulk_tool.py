@@ -25,11 +25,6 @@ import os.path
 import zipfile
 
 
-# TODO: We should probably just sub-class FTDClient instead of storing it as an
-# attribute? Additionally we should move the generally useful functions to the
-# core FTDClient class
-# RESPONSE:  I'm thinking things need to get shuffled around more as we will have non-bulk use cases and it is 
-# probably desirable longer term to share a client between bulk calls and other calls?  Not entirely sure what that looks like yet though.
 class BulkTool:
 
     def __init__(self, client):
@@ -104,7 +99,7 @@ class BulkTool:
                 if status.status_code == 200 and status.json()['status'] not in ('IN_PROGRESS', 'QUEUED'):
                     # 200 and not in progress is a terminal state
                     return status.json()
-                elif (status.status_code == 200 and status.json()['status'] in ('IN_PROGRESS', 'QUEUED')) or status.status_code == 423:
+                elif (status.status_code == 200 and status.json()['status'] in ('IN_PROGRESS', 'QUEUED')) or status.status_code in (423, 503):
                     # Two cases here:
                     # Case return code 200:  This is a positive message saying we are queued waiting to run or we are in progress and running
                     # Case return code 423:  This is a DB lock exception this can happen in some cases where the DB is temporarily locked we 
@@ -112,15 +107,9 @@ class BulkTool:
                     # Pause to avoid going too fast in the case that it is still
                     # in progress
                     time.sleep(1)
-                    continue
-                elif status.status_code != 503:
-                    # 503 indicates backend busy allow that and try again
-                    raise Exception('Error getting import job status: '+str(status.status_code)+" "+str(status))
                 else:
-                    # Only remaining case is status == 503 indicating that we need to wait
-                    # and try again we need to sleep in this case
-                    time.sleep(1)
-
+                    # Unexpected error raise an exception
+                    raise Exception('Error getting import job status: '+str(status.status_code)+" "+str(status))
         else:
             raise Exception('Triggering import failed with response code: '+str(response.status_code)+" "+str(response))
 
@@ -161,20 +150,17 @@ class BulkTool:
         type_list -- This is the list of types you would like to filter
         name_list -- This is the list of names you would like to filter
         """
-        entity_filter_list = None
         # Create string to pass to the back-end with filter criteria
-        if id_list is not None or type_list is not None or name_list is not None:
-            entity_filter_list = []
-            if id_list:
-                entity_filter_list.extend(id_list)
-            if type_list:
-                for objtype in type_list:
-                    entity_filter_list.append('type=' + objtype)
-            
-            if name_list:
-                for objname in name_list:
-                    entity_filter_list.append('name=' + objname)
-        
+        entity_filter_list = []
+        if id_list is not None:
+            for objid in id_list:
+                entity_filter_list.append('id=' + objid)
+        if type_list is not None:
+            for objtype in type_list:
+                entity_filter_list.append('type=' + objtype)
+        if name_list:
+            for objname in name_list:
+                entity_filter_list.append('name=' + objname)
         return entity_filter_list
 
     def _do_download_export_file(self, export_file_name='/tmp/export.zip',  
@@ -353,14 +339,12 @@ class BulkTool:
             full_export_json = json.loads(full_export_doc)
             #loop through json documents separating by type
             for myobject in full_export_json:
-                if 'data' in myobject:
-                    # it is a normal object check for type
-                    if 'type' in myobject['data']:
-                        if myobject['data']['type'] in type_to_object_list_dict:
-                            type_list = type_to_object_list_dict[myobject['data']['type']]
-                            type_list.append(myobject)
-                        else:
-                            type_to_object_list_dict[myobject['data']['type']] = [myobject]
+                if 'data' in myobject and 'type' in myobject['data']:
+                    if myobject['data']['type'] in type_to_object_list_dict:
+                        type_list = type_to_object_list_dict[myobject['data']['type']]
+                        type_list.append(myobject)
+                    else:
+                        type_to_object_list_dict[myobject['data']['type']] = [myobject]
 
         for key_type, value_obj_list in type_to_object_list_dict.items():
             parse_json.dict_list_to_csv(value_obj_list, dest_directory + '/' + key_type+'.csv')
@@ -576,8 +560,114 @@ class BulkTool:
             
         return result_path
     
+    def _get_object_body_from_import_record(self, obj):
+        """
+        This is a helper method for _filter_object_list that will look at a parsed import record
+        extracting the data object body and returning that if present.  Otherwise it will return the passed
+        in object.  This allows for filtering metadata records and also actual object records with a generic
+        type filter.
+        
+        Example of object with a data block:
+        
+        {
+           "action": "CREATE",
+           "data": {
+              "dhcpServerEnabled": false,
+              "id": "9511457f-6ebe-11ea-b045-eb1040fc6650",
+              "ipv4Address": "192.168.0.100",
+              "ipv4Gateway": "192.168.0.254",
+              "ipv4Mode": "STATIC",
+              "ipv4NetMask": "255.255.255.0",
+              "ipv6Mode": "STATIC",
+              "routeInternally": false,
+              "type": "managementip",
+              "version": "jtinuxy4k6w22"
+           },
+           "type": "identitywrapper"
+        }
+        
+        An example of the other type of block for metadata:
+        
+        {
+           "apiVersion": "v4",
+           "configType": "FULL_CONFIG",
+           "exportType": "FULL_EXPORT",
+           "generatedOn": "Mon Apr 13 23:41:40 UTC 2020",
+           "hardwareModel": "Cisco Firepower Threat Defense for VMWare",
+           "softwareVersion": "6.5.0-115",
+           "type": "metadata"
+        }
+        
+        Parameters:
+        
+        obj -- This is the parsed object to check for a data block in
+        """
+        if 'data' in obj:
+            return obj['data']
+        else:
+            return obj
+        
+    def _debug_object_info(self, obj):
+        """
+        Helper method to debug type, id, name from an object
+        
+        Parameters:
+        
+        obj -- The object to debug info from
+        """
+        id_str = None
+        name_str = None
+        type_str = None
+        if 'id' in obj:
+            id_str = obj['id']
+        if 'name' in obj:
+            name_str = obj['name']
+        if 'type' in obj:
+            type_str = obj['type']
+        logging.debug(f'Filtering object type: {type_str}, id: {id_str}, name: {name_str}')
+    
+    def _filter_object_list(self, object_list, id_list=None, type_list=None, name_list=None):
+        """
+        The purpose of this method is to iterate the object list and remove any items by type, name, id
+        if any of the criteria are met the object will be removed from the passed in list.  The intention is to
+        use this to exclude the items server side.
+        
+        Parameters:
+        
+        object_list -- A generic list of parsed object structures (should look like the output of a json parse)
+        id_list -- A string list of ID names
+        type_list -- A list of string types to exclude
+        name_list -- This is the list of names to exclude
+        
+        If the field isn't present that object will not be excluded.
+        
+        """
+        removal_list = []
+        logging.debug(f'Total objects to import: {len(object_list)}')
+        for obj in object_list:
+            # Get correct part of object to apply the filter
+            lookup_record = self._get_object_body_from_import_record(obj)
+            if id_list is not None and 'id' in lookup_record and lookup_record['id'] in id_list:
+                self._debug_object_info(lookup_record)
+                removal_list.append(obj)
+                continue
+            if name_list is not None and 'name' in lookup_record and lookup_record['name'] in name_list:
+                self._debug_object_info(lookup_record)
+                removal_list.append(obj)
+                continue
+            if type_list is not None and 'type' in lookup_record and lookup_record['type'] in type_list:
+                self._debug_object_info(lookup_record)
+                removal_list.append(obj)
+
+        logging.debug(f'Total objects being removed: {len(removal_list)}')
+        if removal_list:
+            # Prune out removed items if any exist
+            return [x for x in object_list if x not in removal_list]
+        else:
+            return object_list
+
     def bulk_import(self, file_list, input_format='JSON', 
-                    id_list=None, type_list=None, name_list=None):
+                    id_list=None, type_list=None, name_list=None, filter_local=False):
         """
         This method will import a list of files in the given format
         
@@ -588,47 +678,47 @@ class BulkTool:
         id_list -- IDs to exclude from the import package
         type_list -- Types to exclude from the import package
         name_list -- Names to exclude from the import package
+        local_filter -- This determines if the name, type, id filters will be applied locally or on the remote side (passed to the server)
         
         This will return a bool indicating success
         """
+        IMPORT_SUCCESS = 'Successfully completed import'
+        IMPORT_FAIL = 'Unable to complete import'
         return_result = False
-        
         entity_filter_list = self._create_entity_filter(id_list=id_list, type_list=type_list, name_list=name_list)
+        object_list = []
         if input_format == 'CSV':
             logging.info('Importing in CSV mode')
-            object_list = []
             # need to loop  through files and convert to JSON and merge into a single list
             for inputfile in file_list:
-                object_list.extend(parse_csv.parse_csv_to_dict(inputfile))
-            if self._do_upload_import_dict_list(object_list, entity_filter_list=entity_filter_list):
-                logging.info('Successfully completed import')
-                return_result = True
-            else:
-                logging.error('Unable to complete import')
+                object_list.extend(
+                    parse_csv.parse_csv_to_dict(inputfile)
+                )
+
         elif input_format == 'JSON':
             logging.info('Importing in JSON mode')
             #JSON case just merge the JSON docs
-            object_list = []
             for input_file in file_list:
                 object_list.extend(
                     json.loads(read_string_from_file(input_file))
                 )
 
-            if self._do_upload_import_dict_list(object_list, entity_filter_list=entity_filter_list):
-                logging.info('Successfully completed import')
-                return_result = True
-            else:
-                logging.error('Unable to complete import')
         elif input_format == 'YAML':
             logging.info('Importing in YAML mode')
             #JSON case just merge the JSON docs
-            object_list = []
             for input_file in file_list:
-                object_list.extend(read_yaml_to_dict(input_file))
-    
-            if self._do_upload_import_dict_list(object_list, entity_filter_list=entity_filter_list):
-                logging.info('Successfully completed import')
-                return_result = True
-            else:
-                logging.error('Unable to complete import')  
+                object_list.extend(
+                    read_yaml_to_dict(input_file)
+                )
+
+        if filter_local:
+            # If filter local is set true the objects will be removed client side 
+            # instead of server side.  This works around some of the issues with server
+            # side filtering.
+            object_list = self._filter_object_list(object_list, id_list=id_list, name_list=name_list, type_list=type_list)
+        if self._do_upload_import_dict_list(object_list, entity_filter_list=(entity_filter_list if not filter_local else None)):
+            logging.info(IMPORT_SUCCESS)
+            return_result = True
+        else:
+            logging.error(IMPORT_FAIL)  
         return return_result

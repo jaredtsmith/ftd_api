@@ -14,9 +14,6 @@ Created: Jan 3, 2020
 
 '''
 
-# TODO: We should normalize on an error handling strategy. Are we propagating
-# exceptions? Exiting? Logging and return code failure?
-
 import sys
 import os.path
 import ftd_api.parse_properties as parse_properties
@@ -182,6 +179,11 @@ def get_args ():
         '-t','--type_list',
         help="Comma separated list of types to export. This is essentially a filter by type on the export. Only valid for EXPORT mode. Ignored if 'url' or 'pending' are supplied"
     )
+    parser.add_argument(
+        '--filter_local',
+        help="This instructs the import code to filter by the -t -n -i options before sending the data to the server, this can be used as a work around if server side filtering does not work",
+        action='store_true'
+    )
     args = parser.parse_args(remaining_argv)
 
     # Let's do all the up front validation we can based solely on the input
@@ -198,15 +200,14 @@ def get_args ():
         if args.pending and (args.type_list is not None or args.id_list is not None or args.name_list is not None):
             parser.error(f'Filter criteria (id_list, name_list, type_list) are not supported with the pending option please remove the filter criteria')
 
-    elif args.mode == 'IMPORT':
-        if args.pending or args.url is not None:
-            # We do allow type, name, id filters for import they act as exclude filters on the import set
-            parser.error('The following options are not valid with the IMPORT command: --url, -e')
+    elif args.mode == 'IMPORT' and (args.pending or args.url is not None):
+        # We do allow type, name, id filters for import they act as exclude filters on the import set
+        parser.error('The following options are not valid with the IMPORT command: --url, -e')
 
-            #Location for import is either a single file, or list of files (comma delimited)
-            for file in split_string_list(args.location):
-                if not os.path.isfile(file):
-                    parser.error(f'Specified input file(s) could not be located:{args.location}')
+        #Location for import is either a single file, or list of files (comma delimited)
+        for file in split_string_list(args.location):
+            if not os.path.isfile(file):
+                parser.error(f'Specified input file(s) could not be located:{args.location}')
 
     logging.debug('CONFIGURATION:')
     for arg in vars(args):
@@ -244,7 +245,7 @@ def bulk_export(args, client) :
 
     client.bulk_export(args.location, pending_changes, type_list=type_list, id_list=id_list, name_list=name_list, output_format=args.format)            
 
-def bulk_import(args,client):
+def bulk_import(args, client):
     file_list = split_string_list(args.location)
 
     if args.format not in ('CSV', 'JSON', 'YAML'):
@@ -268,7 +269,8 @@ def bulk_import(args,client):
                        input_format=args.format,
                        type_list=type_list,
                        id_list=id_list,
-                       name_list=name_list)
+                       name_list=name_list,
+                       filter_local=args.filter_local)
 
 if __name__ == '__main__':
     main()
