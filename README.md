@@ -18,6 +18,7 @@ Right now, we are only "exposing" the bulk tool. Keep a lookout in this space fo
 
 If you have installed the package, the bulk tool `ftd_bulk_tool` should be in your path already.
 
+```text
     usage: ftd_bulk_tool.py [-h] [-c FILE_NAME] [-D] [-a ADDRESS] [-P PORT]
                         [-u USERNAME] [-p PASSWORD] [-l LOCATION]
                         [-f {CSV,JSON,YAML}] [--url URL] [-e] [-i ID_LIST]
@@ -76,6 +77,7 @@ optional arguments:
                         -i options before sending the data to the server, this
                         can be used as a work around if server side filtering
                         does not work
+```
 
 #### Using a docker container
 
